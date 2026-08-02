@@ -4,7 +4,7 @@
 
 **SymbolCraft** is a Gradle plugin for Kotlin Multiplatform projects that generates icons on-demand from multiple icon libraries (Material Symbols, Bootstrap Icons, Heroicons, etc.).
 
-- **Version**: v0.5.0
+- **Version**: v0.6.0
 - **Status**: ✅ Published to the Gradle Plugin Portal and Maven Central
 - **Language**: Kotlin 2.0.0
 - **Minimum Gradle version**: 8.0+
@@ -709,13 +709,13 @@ docs(readme): update installation guide
 
 ## Changelog
 
-### Unreleased (in development)
+### v0.6.0 (latest)
 - 🍏 **SwiftUI output**: New `swiftUI { }` DSL generating custom SF Symbol `.symbolset` bundles (template v2.0, full 27 weight/scale variant grid) from the same downloaded SVGs; Material weights map to genuine SF weight columns; optional `Symbols.swift` helper enum.
 - 📦 **GitHub Packages publishing**: New `GitHubPackages` Maven repository target (`publishAllPublicationsToGitHubPackagesRepository`) plus a `publish-github-packages` CI job — no Sonatype namespace verification required.
 - 🧪 **Tests**: New `SymbolSetGeneratorTest` (20 cases: template structure, guide constants, geometry centering, weight mapping, determinism, name sanitization).
 - 📝 **Docs**: AGENTS.md rewritten in English; README_ZH.md removed.
 
-### v0.5.0 (latest)
+### v0.5.0
 - ⚠️ **Breaking change**: Built-in `materialSymbol()` / `materialSymbols()` filled Material Symbols names changed from `...fill1` to `...Fill`, avoiding leaking the Google Fonts URL suffix into the Kotlin API.
 - 📚 **Multi-source docs**: README gained configuration examples for built-in Material Symbols, external CDN/npm SVG packages, multi-variant external sources, and local SVGs.
 - 🧪 **Example sync**: example regenerated filled Material Symbols and updated references such as `HomeW400OutlinedFill` and `SettingsW500RoundedFill`.
