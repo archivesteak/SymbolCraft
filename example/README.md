@@ -1,0 +1,283 @@
+# SymbolCraft Example Application
+
+This is a complete Kotlin Multiplatform example application demonstrating the usage of the **SymbolCraft** Gradle plugin.
+
+## Overview
+
+This example showcases:
+- **Multi-platform support**: Android, iOS, and Desktop (JVM)
+- **Icon generation**: Using SymbolCraft to generate icons from multiple sources
+- **Material Symbols**: Various weights, variants, and fill states
+- **External icon libraries**: MDI, esm.sh Material Symbols, and Simple Icons
+- **Local SVG files**: Checked-in project icons from Compose resources
+- **Compose Preview**: Generated preview functions for all icons
+- **Modern configuration**: Using the latest SymbolCraft DSL features
+
+## Version Baseline
+
+- **SymbolCraft**: 0.5.0
+- **Compose Multiplatform**: 1.11.1
+- **Kotlin**: 2.3.21
+- **Preview annotation**: `androidx.compose.ui.tooling.preview.Preview`
+
+## Project Structure
+
+```
+example/
+├── composeApp/                    # Shared Compose Multiplatform app
+│   ├── src/
+│   │   ├── commonMain/           # Common code for all platforms
+│   │   │   ├── generated/
+│   │   │   │   └── symbols/      # SymbolCraft output source root
+│   │   │   └── kotlin/
+│   │   │       └── App.kt        # Main app composable
+│   │   ├── androidMain/          # Android-specific code
+│   │   ├── iosMain/              # iOS-specific code
+│   │   └── jvmMain/              # Desktop-specific code
+│   └── build.gradle.kts          # SymbolCraft configuration
+└── iosApp/                        # iOS app wrapper
+```
+
+## SymbolCraft Configuration
+
+The example demonstrates various configuration options in `composeApp/build.gradle.kts`:
+
+```kotlin
+kotlin {
+    sourceSets {
+        commonMain {
+            kotlin.srcDir("src/commonMain/generated/symbols")
+        }
+    }
+}
+
+symbolCraft {
+    // Output directory for generated icons
+    outputDirectory.set("src/commonMain/generated/symbols")
+    packageName.set("io.github.kingsword09.example")
+    generatePreview.set(true)
+
+    // Icon naming configuration
+    naming {
+        pascalCase()  // Use PascalCase convention
+    }
+
+    // Material Symbols examples
+    materialSymbol("search") {
+        standardWeights() // Adds 400, 500, 700 weights
+    }
+
+    materialSymbol("home") {
+        weights(400, 500, variant = SymbolVariant.ROUNDED)
+        bothFills(weight = 400) // Both filled and unfilled
+    }
+
+    materialSymbol("person") {
+        allVariants(weight = SymbolWeight.W500) // All variants
+    }
+
+    materialSymbol("settings") {
+        style(weight = 400, variant = SymbolVariant.OUTLINED)
+        style(weight = 500, variant = SymbolVariant.ROUNDED, fill = SymbolFill.FILLED)
+    }
+
+    // External icons from MDI
+    externalIcons(*listOf("abacus", "ab-testing").toTypedArray(), libraryName = "mdi") {
+        urlTemplate = "https://esm.sh/@mdi/svg@latest/svg/{name}.svg"
+    }
+
+    // External icons with style variants
+    externalIcons(*listOf("home", "search", "person", "settings", "arrow_back").toTypedArray(), 
+                  libraryName = "official") {
+        urlTemplate = "https://esm.sh/@material-symbols/svg-400@latest/rounded/{name}{fill}.svg"
+        styleParam("fill") {
+            values("", "-fill")  // unfilled, filled variants
+        }
+    }
+
+    // Local SVG files stored in the project
+    localIcons("local-test") {
+        directory = project.relativePath("src/commonMain/composeResources/files")
+        include("**/*.svg")
+    }
+
+    // Simple Icons
+    externalIcons("github", libraryName = "simple-icons") {
+        urlTemplate = "https://simpleicons.org/icons/{name}.svg"
+    }
+}
+```
+
+## Getting Started
+
+### Prerequisites
+
+- **JDK 17** or higher
+- **Android Studio** (for Android development)
+- **Xcode** (for iOS development, macOS only)
+- **Gradle 8.0+** (included via wrapper)
+
+### Step 1: Generate Icons
+
+Before building the app, generate the icons:
+
+```bash
+./gradlew generateSymbolCraftIcons
+```
+
+This will:
+- Download SVG files from configured sources
+- Convert them to Compose ImageVectors
+- Generate Kotlin files in `composeApp/src/commonMain/generated/symbols/`
+
+### Step 2: Build and Run
+
+#### Android
+
+```bash
+# Build debug APK
+./gradlew :composeApp:assembleDebug
+
+# Or run directly on connected device/emulator
+./gradlew :composeApp:installDebug
+```
+
+You can also open the project in Android Studio and run from there.
+
+#### Desktop (JVM)
+
+```bash
+./gradlew :composeApp:run
+```
+
+#### iOS
+
+1. Open `iosApp/iosApp.xcodeproj` in Xcode
+2. Select a simulator or device
+3. Click Run (⌘R)
+
+Alternatively, from the terminal:
+```bash
+# Open in Xcode
+open iosApp/iosApp.xcodeproj
+```
+
+## Platform-Specific Notes
+
+### Android
+- **Min SDK**: 24
+- **Target SDK**: 36
+- **Compile SDK**: 36
+
+### iOS
+- **Deployment Target**: iOS 15.0+
+- **Requires**: Xcode 14.0 or later
+- **Architecture**: arm64 (device), arm64 simulator
+
+### Desktop
+- **JVM Target**: 17
+- **Supported OS**: Windows, macOS, Linux
+
+## Development Tasks
+
+### Common Gradle Tasks
+
+```bash
+# Generate icons
+./gradlew generateSymbolCraftIcons
+
+# Clean generated icons
+./gradlew cleanSymbolCraftIcons
+
+# Clean icon cache
+./gradlew cleanSymbolCraftCache
+
+# Validate configuration
+./gradlew validateSymbolCraftConfig
+
+# Clean everything
+./gradlew clean
+
+# Build all platforms
+./gradlew build
+```
+
+### Troubleshooting
+
+**Problem**: Icons not found after generation  
+**Solution**: Run `./gradlew clean` then `./gradlew generateSymbolCraftIcons`
+
+**Problem**: Build fails with missing imports  
+**Solution**: Ensure icons are generated before building: `./gradlew generateSymbolCraftIcons`
+
+**Problem**: iOS build fails  
+**Solution**: Run `./gradlew clean` and regenerate the iOS framework
+
+## Using Generated Icons
+
+Generated icons can be used in Compose like this:
+
+```kotlin
+import androidx.compose.material3.Icon
+import androidx.compose.runtime.Composable
+import io.github.kingsword09.example.icons.materialsymbols.Icons as MaterialSymbols
+import io.github.kingsword09.example.icons.materialsymbols.icons.HomeW400OutlinedFill
+import io.github.kingsword09.example.icons.materialsymbols.icons.SearchW400Outlined
+import io.github.kingsword09.example.icons.mdi.Icons as MdiIcons
+import io.github.kingsword09.example.icons.mdi.icons.AbacusMdi
+import io.github.kingsword09.example.icons.official.Icons as OfficialIcons
+import io.github.kingsword09.example.icons.official.icons.HomeFill
+
+@Composable
+fun MyScreen() {
+    // Material Symbols direct import
+    Icon(
+        imageVector = SearchW400Outlined,
+        contentDescription = "Search"
+    )
+
+    // Filled Material Symbols use Fill in 0.5.0+
+    Icon(
+        imageVector = HomeW400OutlinedFill,
+        contentDescription = "Home filled"
+    )
+
+    // Material Symbols accessor object
+    Icon(
+        imageVector = MaterialSymbols.HomeW400OutlinedFill,
+        contentDescription = "Home filled"
+    )
+
+    // External library accessor object
+    Icon(
+        imageVector = MdiIcons.AbacusMdi,
+        contentDescription = "Abacus"
+    )
+
+    // External variants from styleParam()
+    Icon(
+        imageVector = OfficialIcons.HomeFill,
+        contentDescription = "Official home filled"
+    )
+}
+```
+
+## Preview Support
+
+The example enables preview generation with `generatePreview.set(true)`. You can view icon previews:
+
+1. Open generated icon files in Android Studio/IntelliJ IDEA
+2. Look for `@Preview` annotated functions
+3. Click the "Preview" panel on the right side
+4. View rendered icons directly in the IDE
+
+## Learn More
+
+- [SymbolCraft Documentation](../README.md)
+- [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html)
+- [Compose Multiplatform](https://www.jetbrains.com/lp/compose-multiplatform/)
+- [Material Symbols](https://fonts.google.com/icons)
+
+## License
+
+This example is part of the SymbolCraft project and is licensed under Apache 2.0.
