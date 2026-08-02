@@ -290,6 +290,35 @@ class GenerateSymbolsTaskTest {
         assertEquals(TaskOutcome.UP_TO_DATE, secondRun.task(":generateSymbolCraftIcons")?.outcome)
     }
 
+    @Test
+    fun `editing a local svg re-runs generation`() {
+        createSettings("symbolcraft-local-edit")
+        createBuildScript(
+            """
+                cacheEnabled.set(false)
+                localIcons(libraryName = "brand") {
+                    directory = "src/icons"
+                }
+            """
+                .trimIndent()
+        )
+
+        writeSvg("src/icons/brand/logo.svg")
+
+        val firstRun = runGradle("generateSymbolCraftIcons")
+        assertEquals(TaskOutcome.SUCCESS, firstRun.task(":generateSymbolCraftIcons")?.outcome)
+
+        val secondRun = runGradle("generateSymbolCraftIcons")
+        assertEquals(TaskOutcome.UP_TO_DATE, secondRun.task(":generateSymbolCraftIcons")?.outcome)
+
+        // Local SVG contents are declared task inputs: changing only the file (not the DSL)
+        // must invalidate up-to-date checks.
+        writeSvg("src/icons/brand/logo.svg", pathData = "M4 4h16v16H4z")
+
+        val thirdRun = runGradle("generateSymbolCraftIcons")
+        assertEquals(TaskOutcome.SUCCESS, thirdRun.task(":generateSymbolCraftIcons")?.outcome)
+    }
+
     private fun createSettings(projectName: String) {
         writeProjectFile("settings.gradle.kts", """rootProject.name = "$projectName"""")
     }
@@ -315,18 +344,22 @@ class GenerateSymbolsTaskTest {
         target.writeText(content.trimIndent() + "\n")
     }
 
-    private fun writeSvg(relativePath: String) {
-        val svgContent =
-            """
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                    <path d="M12 2a10 10 0 1 1-0.001 20.001A10 10 0 0 1 12 2z" fill="currentColor"/>
-                </svg>
-            """
-                .trimIndent()
+    private fun writeSvg(
+        relativePath: String,
+        pathData: String = "M12 2a10 10 0 1 1-0.001 20.001A10 10 0 0 1 12 2z",
+    ) {
         val target = projectDir.resolve(relativePath)
         target.parent?.createDirectories()
-        target.writeText(svgContent)
+        target.writeText(testSvg(pathData))
     }
+
+    private fun testSvg(pathData: String): String =
+        """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path d="$pathData" fill="currentColor"/>
+            </svg>
+        """
+            .trimIndent()
 
     private fun buildScript(configBody: String): String =
         """
@@ -359,13 +392,7 @@ class GenerateSymbolsTaskTest {
         cacheDir.createDirectories()
 
         val cacheKey = "${sanitize(iconName)}_material-symbols_400_outlined_unfilled"
-        val svgContent =
-            """
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                    <path d="M12 2a10 10 0 1 1-0.001 20.001A10 10 0 0 1 12 2z" fill="currentColor"/>
-                </svg>
-            """
-                .trimIndent()
+        val svgContent = testSvg("M12 2a10 10 0 1 1-0.001 20.001A10 10 0 0 1 12 2z")
         val cacheFile = cacheDir.resolve("$cacheKey.svg")
         val metaFile = cacheDir.resolve("$cacheKey.meta")
         val url =
@@ -381,13 +408,7 @@ class GenerateSymbolsTaskTest {
         cacheDir.createDirectories()
 
         val cacheKey = config.getCacheKey(iconName)
-        val svgContent =
-            """
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                    <path d="M12 2a10 10 0 1 1-0.001 20.001A10 10 0 0 1 12 2z" fill="currentColor"/>
-                </svg>
-            """
-                .trimIndent()
+        val svgContent = testSvg("M12 2a10 10 0 1 1-0.001 20.001A10 10 0 0 1 12 2z")
         val cacheFile = cacheDir.resolve("$cacheKey.svg")
         val metaFile = cacheDir.resolve("$cacheKey.meta")
         val url = config.buildUrl(iconName)

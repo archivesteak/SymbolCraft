@@ -1,5 +1,6 @@
 package io.github.archivesteak.symbolcraft.plugin
 
+import io.github.archivesteak.symbolcraft.model.LocalIconConfig
 import io.github.archivesteak.symbolcraft.tasks.CleanSymbolsCacheTask
 import io.github.archivesteak.symbolcraft.tasks.CleanSymbolsIconsTask
 import io.github.archivesteak.symbolcraft.tasks.GenerateSymbolsTask
@@ -73,6 +74,19 @@ class SymbolCraftPlugin : Plugin<Project> {
                 )
                 task.swiftUIOutputDir.fileProvider(symbolSetDirProvider)
                 task.swiftUISourceDir.fileProvider(swiftSourceDirProvider)
+                // Local SVG contents are task inputs: editing a checked-in SVG must re-run
+                // generation. Discovery already ran at configuration time (localIcons DSL),
+                // so this provider just re-reads the resolved paths.
+                task.localSvgFiles.from(
+                    project.providers.provider {
+                        extension
+                            .getIconsConfig()
+                            .values
+                            .flatten()
+                            .filterIsInstance<LocalIconConfig>()
+                            .map { it.absolutePath }
+                    }
+                )
             }
 
         project.tasks.register("cleanSymbolCraftCache", CleanSymbolsCacheTask::class.java) { task ->

@@ -1,7 +1,5 @@
 package io.github.archivesteak.symbolcraft.model
 
-import kotlinx.serialization.Serializable
-
 /**
  * Sanitize icon name to prevent path traversal attacks.
  *
@@ -53,7 +51,6 @@ private fun stableShortHash(input: String): String {
  *
  * Example:
  * ```kotlin
- * @Serializable
  * data class MyCustomIconConfig(
  *     val style: String = "default"
  * ) : IconConfig {
@@ -119,7 +116,6 @@ interface IconConfig {
  * @property absolutePath Fully resolved path to the SVG file on disk.
  * @property relativePath Relative path (without extension) inside the configured local directory.
  */
-@Serializable
 data class LocalIconConfig(
     val libraryName: String,
     val absolutePath: String,
@@ -181,7 +177,6 @@ data class LocalIconConfig(
  * @property grade Fine-tuning parameter for weight adjustment
  * @property opticalSize Optical size optimization parameter
  */
-@Serializable
 data class MaterialSymbolsConfig(
     val weight: SymbolWeight = SymbolWeight.W400,
     val variant: SymbolVariant = SymbolVariant.OUTLINED,
@@ -238,7 +233,6 @@ data class MaterialSymbolsConfig(
  * @property urlTemplate URL pattern with placeholders (must be full URL)
  * @property styleParams Map of style parameters for placeholder replacement
  */
-@Serializable
 data class ExternalIconConfig(
     val libraryName: String,
     val urlTemplate: String,
@@ -322,20 +316,17 @@ data class ExternalIconConfig(
 
 // Material Symbols enums
 
-@Serializable
 enum class SymbolVariant(val shortName: String, val pathName: String) {
     OUTLINED("Outlined", "outlined"),
     ROUNDED("Rounded", "rounded"),
     SHARP("Sharp", "sharp"),
 }
 
-@Serializable
 enum class SymbolFill(val urlSuffix: String, val signatureSuffix: String) {
     UNFILLED("", ""),
     FILLED("fill1", "Fill"),
 }
 
-@Serializable
 enum class SymbolWeight(val value: Int) {
     /** weight = 100 - Thinnest stroke weight */
     W100(100),
@@ -378,4 +369,29 @@ enum class SymbolWeight(val value: Int) {
     }
 
     override fun toString(): String = value.toString()
+}
+
+/**
+ * Deterministic filename for a downloaded/copied SVG in the per-library temp directory.
+ *
+ * Shared by the download phase (tasks/internal/DownloadCoordinator) and the `.symbolset` generation
+ * phase (converter/SymbolSetGenerator) so a config always maps back to exactly one temp SVG. Using
+ * the signature guarantees the mapping survives parallel downloads and naming collisions.
+ */
+internal fun tempSvgFileName(iconName: String, config: IconConfig): String {
+    val signature = config.getSignature()
+
+    if (config is LocalIconConfig) {
+        val preferredName = signature.ifBlank { iconName }
+        val safeName =
+            preferredName
+                .replace("[^A-Za-z0-9_]".toRegex(), "_")
+                .replace("_+".toRegex(), "_")
+                .trim('_')
+                .ifBlank { "LocalIcon" }
+        return "$safeName.svg"
+    }
+
+    val base = iconName.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+    return "$base${signature.ifBlank { "Local" }}.svg"
 }

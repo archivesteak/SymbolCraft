@@ -55,7 +55,6 @@ class LocalIconsBuilderTest {
             include("brand/**/*.svg")
         }
 
-        println("include filter keys: ${configs.keys}")
         assertEquals(2, configs.size)
         assertTrue(configs.keys.containsAll(listOf("brand_logo", "brand_sub_icon")))
     }

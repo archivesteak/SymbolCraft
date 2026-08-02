@@ -11,13 +11,17 @@ import io.github.archivesteak.symbolcraft.tasks.internal.SvgConversionCoordinato
 import io.github.archivesteak.symbolcraft.tasks.internal.SymbolSetGenerationCoordinator
 import kotlinx.coroutines.runBlocking
 import org.gradle.api.DefaultTask
+import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.CacheableTask
 import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputFiles
 import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
 
 /**
@@ -53,6 +57,16 @@ abstract class GenerateSymbolsTask : DefaultTask() {
     @get:Input abstract val cacheDirectory: Property<String>
 
     @get:Input abstract val projectBuildDir: Property<String>
+
+    /**
+     * Contents of every local SVG referenced via `localIcons { }`. Declared as an input so that
+     * editing a local SVG invalidates up-to-date checks and build-cache keys; remote SVGs are
+     * instead covered by the downloader's TTL cache. ABSOLUTE sensitivity because local icon paths
+     * are machine-specific anyway.
+     */
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.ABSOLUTE)
+    abstract val localSvgFiles: ConfigurableFileCollection
 
     /**
      * Executes a full generation pass. The method runs inside `runBlocking` so downstream

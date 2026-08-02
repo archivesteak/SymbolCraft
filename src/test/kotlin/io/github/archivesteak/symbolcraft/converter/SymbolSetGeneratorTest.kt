@@ -309,7 +309,7 @@ class SymbolSetGeneratorTest {
                     )
             )
 
-        // Temp file names must match DownloadCoordinator.buildTempSvgFileName
+        // Temp file names must match the shared tempSvgFileName used by the download phase
         listOf(
                 "HomeW400Outlined.svg",
                 "HomeW500Outlined.svg",
@@ -400,7 +400,7 @@ class SymbolSetGeneratorTest {
             )
         val configs = mapOf("phone-icon" to listOf(config))
 
-        // DownloadCoordinator names local temp files by sanitized signature only (no icon prefix)
+        // Download phase names local temp files by sanitized signature only (no icon prefix)
         File(libDir, "BrandPhoneIcon.svg").writeText(materialSvg)
 
         val results =

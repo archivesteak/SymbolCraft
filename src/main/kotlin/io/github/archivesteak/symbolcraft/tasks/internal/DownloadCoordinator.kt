@@ -3,6 +3,7 @@ package io.github.archivesteak.symbolcraft.tasks.internal
 import io.github.archivesteak.symbolcraft.download.SvgDownloader
 import io.github.archivesteak.symbolcraft.model.IconConfig
 import io.github.archivesteak.symbolcraft.model.LocalIconConfig
+import io.github.archivesteak.symbolcraft.model.tempSvgFileName
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineDispatcher
@@ -167,7 +168,7 @@ internal class DownloadCoordinator(
                 val librarySubdir = File(tempDir, iconConfig.libraryId)
                 librarySubdir.mkdirs()
 
-                val fileName = buildTempSvgFileName(iconName, iconConfig)
+                val fileName = tempSvgFileName(iconName, iconConfig)
                 val targetFile = File(librarySubdir, fileName)
                 sourceFile.copyTo(targetFile, overwrite = true)
 
@@ -209,7 +210,7 @@ internal class DownloadCoordinator(
                 val librarySubdir = File(tempDir, iconConfig.libraryId)
                 librarySubdir.mkdirs()
 
-                val fileName = buildTempSvgFileName(iconName, iconConfig)
+                val fileName = tempSvgFileName(iconName, iconConfig)
                 val tempFile = File(librarySubdir, fileName)
                 tempFile.writeText(svgContent)
 
@@ -243,32 +244,6 @@ internal class DownloadCoordinator(
             )
             DownloadResult.Failed(iconName, iconConfig, detailedError)
         }
-    }
-
-    /**
-     * Builds deterministic filenames for the temporary SVG assets.
-     *
-     * Using signatures guarantees we can map a generated file back to the originating config when
-     * producing Kotlin sources later in the pipeline.
-     */
-    private fun buildTempSvgFileName(iconName: String, iconConfig: IconConfig): String {
-        val signature = iconConfig.getSignature()
-
-        if (iconConfig is LocalIconConfig) {
-            val preferredName = signature.ifBlank { iconName }
-            val safeName =
-                preferredName
-                    .replace("[^A-Za-z0-9_]".toRegex(), "_")
-                    .replace("_+".toRegex(), "_")
-                    .trim('_')
-                    .ifBlank { "LocalIcon" }
-            return "$safeName.svg"
-        }
-
-        val base =
-            iconName.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
-        val suffix = if (signature.isNotBlank()) signature else "Local"
-        return "$base$suffix.svg"
     }
 
     /** Writes a user-friendly progress summary once all parallel jobs complete. */

@@ -2,7 +2,6 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     alias(libs.plugins.kotlin.jvm)
-    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.gradle.plugin.publish)
     alias(libs.plugins.maven.publish)
     alias(libs.plugins.dokka)
@@ -14,7 +13,7 @@ plugins {
 
 group = "io.github.archivesteak"
 
-version = "0.6.4"
+version = "0.6.5"
 
 kotlin { jvmToolchain(17) }
 
@@ -22,17 +21,12 @@ ktfmt { kotlinLangStyle() }
 
 // Configure Kotlin compiler options
 tasks.withType<KotlinCompile> {
-    compilerOptions {
-        freeCompilerArgs.addAll(listOf("-opt-in=kotlin.RequiresOptIn", "-Xcontext-receivers"))
-    }
+    compilerOptions { freeCompilerArgs.addAll(listOf("-opt-in=kotlin.RequiresOptIn")) }
 }
 
 dependencies {
     // Coroutines
     implementation(libs.kotlinx.coroutines.core)
-
-    // Serialization
-    implementation(libs.kotlinx.serialization.json)
 
     // HTTP Client
     implementation(libs.ktor.client.core)
@@ -129,19 +123,18 @@ publishing {
     }
 }
 
+// Vanniktech's signAllPublications() creates the sign tasks; here we feed them in-memory PGP
+// keys when available and otherwise mark signing optional, so publishToMavenLocal and the
+// GitHub Packages publish don't fail for lack of a signatory.
 signing {
     val signingKey = project.findProperty("signingKey") as String? ?: System.getenv("SIGNING_KEY")
     val signingPassword =
         project.findProperty("signingPassword") as String? ?: System.getenv("SIGNING_PASSWORD")
 
-    // Always set isRequired to false
-    isRequired = false
+    isRequired = !signingKey.isNullOrBlank() && !signingPassword.isNullOrBlank()
 
-    if (!signingKey.isNullOrBlank() && !signingPassword.isNullOrBlank()) {
+    if (isRequired) {
         useInMemoryPgpKeys(signingKey, signingPassword)
-
-        // Configure signing after all publications are created
-        afterEvaluate { sign(publishing.publications) }
     }
 }
 
@@ -205,9 +198,6 @@ tasks.jar {
             "Implementation-Title" to project.name,
             "Implementation-Version" to project.version,
             "Implementation-Vendor" to "archivesteak",
-            "Built-By" to System.getProperty("user.name"),
-            "Built-JDK" to System.getProperty("java.version"),
-            "Built-Gradle" to gradle.gradleVersion,
         )
     }
 }

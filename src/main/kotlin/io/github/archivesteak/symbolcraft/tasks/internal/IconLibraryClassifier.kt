@@ -6,7 +6,7 @@ import io.github.archivesteak.symbolcraft.model.IconConfig
  * Utility for grouping icons by their originating library.
  *
  * The conversion pipeline writes Kotlin sources into `icons/<library>/...`. Grouping ahead of time
- * allows us to create those directories once and keep log output organised.
+ * tells [SvgConversionCoordinator] which libraries to convert and keeps log output organised.
  */
 internal object IconLibraryClassifier {
 
