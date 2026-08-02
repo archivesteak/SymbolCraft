@@ -79,7 +79,7 @@ internal class SymbolSetGenerationCoordinator(private val logger: Logger) {
         }
 
         if (swiftUI.generateSwiftEnum.get() && allSymbolSetNames.isNotEmpty()) {
-            generator.generateSwiftEnumFile(allSymbolSetNames, outputDir)
+            generator.generateSwiftEnumFile(allSymbolSetNames, outputDir, swiftUI.scaleFactor.get())
             logger.lifecycle("   📝 Generated Symbols.swift (${allSymbolSetNames.size} symbols)")
         }
 

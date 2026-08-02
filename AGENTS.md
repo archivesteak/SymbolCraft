@@ -4,7 +4,7 @@
 
 **SymbolCraft** is a Gradle plugin for Kotlin Multiplatform projects that generates icons on-demand from multiple icon libraries (Material Symbols, Bootstrap Icons, Heroicons, etc.).
 
-- **Version**: v0.6.0
+- **Version**: v0.6.1
 - **Status**: ✅ Published to GitHub Packages (fork of [kingsword09/SymbolCraft](https://github.com/kingsword09/SymbolCraft), not on Maven Central / Plugin Portal)
 - **Language**: Kotlin 2.0.0
 - **Minimum Gradle version**: 8.0+
@@ -103,7 +103,15 @@ SymbolCraft/
   - `cleanSymbolCraftCache` - Clean the SVG cache
   - `cleanSymbolCraftIcons` - Clean generated icon files
   - `validateSymbolCraftConfig` - Validate configuration
-- Automatically adds task dependencies: icons are generated before Kotlin compilation
+- Automatically adds task dependencies: icons are generated before Kotlin compilation.
+  Wiring is **type-based**: once any Kotlin-capable plugin is applied (`org.jetbrains.kotlin.jvm` /
+  `multiplatform` / `android`, `com.android.application` / `library` /
+  `com.android.kotlin.multiplatform.library`), every `KotlinCompileTool` task depends on the
+  generation task. This covers AGP built-in Kotlin / KMP compile tasks like `compileAndroidMain`
+  whose names contain no "Kotlin" — name matching alone missed them. The task type is loaded
+  reflectively (`Class.forName`) because kotlin-gradle-plugin is `compileOnly` and a static
+  reference breaks plugin application/class decoration in non-Kotlin projects. A name-based
+  fallback (`compile*Kotlin*`, metadata, `merge*Assets`, `process*Resources`) remains as backup.
 
 **Key code**:
 ```kotlin
@@ -115,12 +123,14 @@ class SymbolCraftPlugin : Plugin<Project> {
             // Configure task...
         }
 
-        // Automatically add as dependency of Kotlin compilation tasks
-        project.afterEvaluate {
-            project.tasks.configureEach { task ->
-                if (task.name.contains("compileKotlin", ignoreCase = true)) {
-                    task.dependsOn(generateTask)
-                }
+        // Type-based wiring: every Kotlin compile task depends on generation
+        kotlinCapablePluginIds.forEach { id ->
+            project.plugins.withId(id) { plugin ->
+                val type = Class.forName(
+                    "org.jetbrains.kotlin.gradle.tasks.KotlinCompileTool",
+                    true, plugin.javaClass.classLoader,
+                )
+                project.tasks.withType(type).configureEach { it.dependsOn(generateTask) }
             }
         }
     }
@@ -320,7 +330,7 @@ abstract class IconNameTransformer {
 
 **Output**:
 - Geometry: baseScale = (CapHeightM / viewBox height) × 1.7 × scaleFactor; glyphs vertically centered between Capline-M and Baseline-M, laid out horizontally by weight column (center 1650, spacing 296.71); `left-margin`/`right-margin` adjusted to Regular column width ±4.5
-- `Symbols.swift`: `GeneratedSymbol` enum + `Image(symbol:)` convenience initializer (Swift keyword escaping, leading-digit handling)
+- `Symbols.swift`: `GeneratedSymbol` enum + `Image(symbol:)` convenience initializer (Swift keyword escaping, leading-digit handling) + **fixed-size helper** `image(boxSize:)` and `GeneratedSymbol.pointScale` — `.symbolset` glyphs size by font point size, not by box; pointScale = 1 / (1.7 × 0.7 × scaleFactor) (SF Pro cap ratio 0.7, optical scaling 1.7, configured scaleFactor baked in at generation time) converts an artwork box size to the required font size
 
 **Limitations**: Only `<path>`-based SVGs are supported (Material/Bootstrap/Heroicons all qualify); Xcode import cannot be validated on Windows, so structural correctness is guarded by unit tests.
 
@@ -709,7 +719,12 @@ docs(readme): update installation guide
 
 ## Changelog
 
-### v0.6.0 (latest)
+### v0.6.1 (latest)
+- 🔧 **Compile-task wiring fix**: generation is now wired into every `KotlinCompileTool` task by type (loaded reflectively), fixing builds where the Kotlin compile task name contains no "Kotlin" — e.g. AGP 9.x built-in Kotlin / KMP modules (`compileAndroidMain`), which previously failed with "uses this output of task ':generateSymbolCraftIcons' without declaring a dependency".
+- 📐 **SwiftUI fixed-size helper**: generated `Symbols.swift` now includes `GeneratedSymbol.pointScale` (= 1 / (1.7 × 0.7 × scaleFactor)) and `image(boxSize:)`, so a symbol can be rendered in an exact point box (e.g. `GeneratedSymbol.homeOutlined.image(boxSize: 24)`) instead of only sizing by font.
+- 🧪 **Tests**: 2 new `SymbolSetGeneratorTest` cases (pointScale value, scaleFactor baking).
+
+### v0.6.0
 - 🍏 **SwiftUI output**: New `swiftUI { }` DSL generating custom SF Symbol `.symbolset` bundles (template v2.0, full 27 weight/scale variant grid) from the same downloaded SVGs; Material weights map to genuine SF weight columns; optional `Symbols.swift` helper enum.
 - 📦 **GitHub Packages publishing**: New `GitHubPackages` Maven repository target (`publishAllPublicationsToGitHubPackagesRepository`) plus a `publish-github-packages` CI job — no Sonatype namespace verification required.
 - 🧪 **Tests**: New `SymbolSetGeneratorTest` (20 cases: template structure, guide constants, geometry centering, weight mapping, determinism, name sanitization).

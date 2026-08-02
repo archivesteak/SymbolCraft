@@ -37,3 +37,17 @@ public extension Image {
         self.init(symbol.rawValue)
     }
 }
+
+public extension GeneratedSymbol {
+    /// Multiplier converting an artwork box size (points) to the font point
+    /// size that renders the symbol at exactly that visual size.
+    /// Derived from the template geometry: 1 / (1.7 × 0.7 × 1.0).
+    static var pointScale: CGFloat { 0.8403361344537815 }
+
+    /// The symbol rendered so its artwork fills a square of `boxSize` points,
+    /// independent of the surrounding font size.
+    func image(boxSize: CGFloat) -> some View {
+        Image(symbol: self)
+            .font(.system(size: boxSize * GeneratedSymbol.pointScale))
+    }
+}

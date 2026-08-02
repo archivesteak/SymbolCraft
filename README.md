@@ -340,6 +340,17 @@ Image(symbol: .homeOutlined)
 Image("HomeOutlined")
 ```
 
+### Fixed-size rendering
+
+`.symbolset` glyphs size with the **font point size**, not a fixed box — `Image(symbol:)` followed by `.frame(width: 24, height: 24)` will clip or shrink unpredictably. The generated `Symbols.swift` includes a helper that converts an artwork box size to the correct font size for you:
+
+```swift
+// Renders the artwork in an exact 24×24 pt box (like a Compose 24.dp icon)
+GeneratedSymbol.homeOutlined.image(boxSize: 24)
+```
+
+The conversion factor is exposed as `GeneratedSymbol.pointScale` (≈ 0.84 at the default `scaleFactor = 1.0`): the template's medium-row cap-height band spans 1.7 × `scaleFactor` × the font cap height (0.7 em for SF Pro), so `pointScale = 1 / (1.7 × 0.7 × scaleFactor)`. If you change `scaleFactor` in the DSL, the regenerated `Symbols.swift` bakes the matching value in.
+
 > **Note**: the generated bundles require no macOS tooling to produce, but importing them into an Xcode project still requires Xcode (and custom symbols require iOS 13+ at runtime).
 
 ## 📋 Configuration Options

@@ -434,6 +434,30 @@ class SymbolSetGeneratorTest {
         assertTrue(content.contains("init(symbol: GeneratedSymbol)"))
     }
 
+    @Test
+    fun `generateSwiftEnumFile emits pointScale and box-size helper`() {
+        val tempDir = createTempDirectory("symbolset-swift").toFile()
+        val file = generator.generateSwiftEnumFile(listOf("HomeOutlined"), tempDir)
+        val content = file.readText()
+
+        // 1 / (1.7 × 0.7 × 1.0) ≈ 0.84 — the box→font multiplier for default scaling.
+        assertTrue(content.contains("static var pointScale: CGFloat { 0.8403361344537815 }"))
+        assertTrue(content.contains("func image(boxSize: CGFloat) -> some View"))
+        assertTrue(content.contains(".font(.system(size: boxSize * GeneratedSymbol.pointScale))"))
+    }
+
+    @Test
+    fun `generateSwiftEnumFile bakes the configured scaleFactor into pointScale`() {
+        val tempDir = createTempDirectory("symbolset-swift").toFile()
+        val file =
+            generator.generateSwiftEnumFile(listOf("HomeOutlined"), tempDir, scaleFactor = 2.0)
+        val content = file.readText()
+
+        // 1 / (1.7 × 0.7 × 2.0) ≈ 0.42 — larger glyphs need a smaller font for the same box.
+        assertTrue(content.contains("static var pointScale: CGFloat { 0.42016806722689076 }"))
+        assertTrue(content.contains("1 / (1.7 × 0.7 × 2.0)"))
+    }
+
     // ========== Helpers ==========
 
     private fun writeSvg(name: String, content: String): File {
