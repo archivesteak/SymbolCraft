@@ -435,6 +435,103 @@ class SymbolSetGeneratorTest {
     }
 
     @Test
+    fun `parseSvg preserves fill-rule and clip-rule`() {
+        val file =
+            writeSvg(
+                "fr.svg",
+                """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                    <path d="M0 0h24v24H0z" fill-rule="evenodd" clip-rule="evenodd"/>
+                </svg>""",
+            )
+        val parsed = generator.parseSvg(file)
+
+        assertEquals("evenodd", parsed.paths[0].fillRule)
+        assertEquals("evenodd", parsed.paths[0].clipRule)
+    }
+
+    @Test
+    fun `generated symbol set svg emits fill-rule attributes`() {
+        val file =
+            writeSvg(
+                "fr.svg",
+                """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                    <path d="M0 0h24v24H0z" fill-rule="evenodd"/>
+                </svg>""",
+            )
+        val svg =
+            generator.buildSymbolSetSvg("Test", mapOf("Regular" to generator.parseSvg(file)), 1.0)
+
+        assertTrue(svg.contains("<path d=\"M0 0h24v24H0z\" fill-rule=\"evenodd\"/>"))
+    }
+
+    @Test
+    fun `buildSymbolSetSvg rejects non-positive scaleFactor`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            generator.buildSymbolSetSvg("Test", mapOf("Regular" to parsedMaterial()), 0.0)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            generator.buildSymbolSetSvg("Test", mapOf("Regular" to parsedMaterial()), -1.5)
+        }
+    }
+
+    @Test
+    fun `generateSwiftEnumFile rejects non-positive scaleFactor`() {
+        val tempDir = createTempDirectory("symbolset-swift").toFile()
+        assertThrows(IllegalArgumentException::class.java) {
+            generator.generateSwiftEnumFile(listOf("Home"), tempDir, -1.0)
+        }
+    }
+
+    @Test
+    fun `generateSwiftEnumFile creates missing output directories`() {
+        val dir = File(createTempDirectory("symbolset-swift").toFile(), "nested/Sources")
+        val file = generator.generateSwiftEnumFile(listOf("Home"), dir)
+
+        assertTrue(file.exists())
+        assertTrue(file.readText().contains("case home"))
+    }
+
+    @Test
+    fun `generateSwiftEnumFile dedupes colliding and reserved case names`() {
+        val tempDir = createTempDirectory("symbolset-swift").toFile()
+        val file =
+            generator.generateSwiftEnumFile(
+                listOf("Foo-Bar", "FooBar", "PointScale", "AllCases"),
+                tempDir,
+            )
+        val content = file.readText()
+
+        // Sorted order: AllCases, Foo-Bar, FooBar, PointScale — first claim wins the base name.
+        assertTrue(content.contains("case allCases2 = \"AllCases\""))
+        assertTrue(content.contains("case fooBar = \"Foo-Bar\""))
+        assertTrue(content.contains("case fooBar2 = \"FooBar\""))
+        assertTrue(content.contains("case pointScale2 = \"PointScale\""))
+    }
+
+    @Test
+    fun `generateLibrary fails fast on duplicate symbol set names`() {
+        val tempDir = createTempDirectory("symbolset-dup").toFile()
+        val libDir = File(tempDir, "test").apply { mkdirs() }
+        val config =
+            ExternalIconConfig(libraryName = "test", urlTemplate = "https://example.com/{name}.svg")
+        // "a b" and "a-b" sanitize to the same asset name.
+        val configs = mapOf("a b" to listOf(config), "a-b" to listOf(config))
+
+        val error =
+            assertThrows(IllegalArgumentException::class.java) {
+                generator.generateLibrary(
+                    libraryId = "test",
+                    configs = configs,
+                    libraryTempDir = libDir,
+                    outputDirectory = File(tempDir, "out"),
+                    nameTransformer = NameTransformerFactory.pascalCase(),
+                    scaleFactor = 1.0,
+                )
+            }
+        assertTrue(error.message.orEmpty().contains("Duplicate symbol set names"))
+    }
+
+    @Test
     fun `generateSwiftEnumFile emits pointScale and box-size helper`() {
         val tempDir = createTempDirectory("symbolset-swift").toFile()
         val file = generator.generateSwiftEnumFile(listOf("HomeOutlined"), tempDir)

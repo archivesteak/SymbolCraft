@@ -4,7 +4,7 @@
 
 **SymbolCraft** is a Gradle plugin for Kotlin Multiplatform projects that generates icons on-demand from multiple icon libraries (Material Symbols, Bootstrap Icons, Heroicons, etc.).
 
-- **Version**: v0.6.2
+- **Version**: v0.6.3
 - **Status**: ✅ Published to GitHub Packages (fork of [kingsword09/SymbolCraft](https://github.com/kingsword09/SymbolCraft), not on Maven Central / Plugin Portal)
 - **Language**: Kotlin 2.0.0
 - **Minimum Gradle version**: 8.0+
@@ -30,7 +30,7 @@
 | Gradle | 8.0+ | Build system |
 | Kotlin Coroutines | 1.8.1 | Parallel downloads |
 | Ktor Client | 2.3.12 | HTTP client |
-| Kotlinx Serialization | - | JSON serialization |
+| Kotlinx Serialization | 1.7.1 | JSON serialization |
 | svg-to-compose | 0.1.0 | SVG conversion library (io.github.kingsword09 fork of DevSrSouza/svg-to-compose) |
 
 ---
@@ -42,20 +42,33 @@ SymbolCraft/
 ├── build.gradle.kts                    # Plugin build configuration
 ├── gradle.properties                   # Gradle configuration
 ├── settings.gradle.kts                 # Gradle settings
-├── libs.versions.toml                  # Version catalog
+├── gradle/
+│   └── libs.versions.toml              # Version catalog
 │
 ├── src/main/kotlin/io/github/archivesteak/symbolcraft/
+│   ├── SymbolCraftDefaults.kt          # Shared constants and default values
+│   │
 │   ├── plugin/                         # Gradle plugin core
 │   │   ├── SymbolCraftPlugin.kt        # Plugin entry point, task registration
 │   │   ├── SymbolCraftExtension.kt     # DSL configuration interface
 │   │   ├── SwiftUIConfig.kt            # SwiftUI (.symbolset) output configuration
-│   │   └── NamingConfig.kt             # Naming configuration
+│   │   ├── NamingConfig.kt             # Naming configuration
+│   │   └── samples/
+│   │       └── LocalIconsSamples.kt    # DSL usage samples
 │   │
 │   ├── tasks/                          # Gradle tasks
 │   │   ├── GenerateSymbolsTask.kt      # Core generation task (@CacheableTask)
 │   │   ├── CleanSymbolsCacheTask.kt    # Cache cleanup task
 │   │   ├── CleanSymbolsIconsTask.kt    # Generated-files cleanup task
-│   │   └── ValidateSymbolsConfigTask.kt # Configuration validation task
+│   │   ├── ValidateSymbolsConfigTask.kt # Configuration validation task
+│   │   └── internal/                   # Pipeline collaborators (no Gradle task API)
+│   │       ├── GenerationContextFactory.kt  # Builds the immutable GenerationContext
+│   │       ├── PreGenerationCleaner.kt      # Removes stale generated files + cache pruning
+│   │       ├── DownloadCoordinator.kt       # Parallel SVG download orchestration
+│   │       ├── DownloadModels.kt            # Download telemetry models
+│   │       ├── IconLibraryClassifier.kt     # Groups configs by library id
+│   │       ├── SvgConversionCoordinator.kt  # SVG → Compose conversion orchestration
+│   │       └── SymbolSetGenerationCoordinator.kt # .symbolset + Symbols.swift orchestration
 │   │
 │   ├── download/                       # Download module
 │   │   └── SvgDownloader.kt            # Smart SVG downloader (parallel coroutines + retry)
@@ -63,7 +76,8 @@ SymbolCraft/
 │   ├── converter/                      # Conversion module
 │   │   ├── Svg2ComposeConverter.kt     # SVG to Compose converter
 │   │   ├── SymbolSetGenerator.kt       # SVG to .symbolset (custom SF Symbols) generator
-│   │   └── IconNameTransformer.kt      # Icon naming transformer
+│   │   ├── IconNameTransformer.kt      # Icon naming transformer
+│   │   └── NameTransformerFactory.kt   # Naming convention factory
 │   │
 │   ├── model/                          # Data models
 │   │   └── IconConfig.kt               # Icon configuration interface and implementations
@@ -213,7 +227,7 @@ Convert to Compose → Generate .symbolset (optional) → Clean unused cache →
 
 **Features**:
 - Cache hit detection
-- Automatic expiry cleanup
+- Expired entries are ignored and refreshed on next download
 - Progress tracking
 - Configurable error retry (exponential backoff)
 
@@ -316,7 +330,7 @@ abstract class IconNameTransformer {
 ### 9. **SwiftUI output (.symbolset / custom SF Symbols)**
 
 **Components**:
-- `plugin/SwiftUIConfig.kt` - `swiftUI { }` DSL configuration (enabled, outputDirectory, scaleFactor, generateSwiftEnum, swiftSourceOutputDirectory; disabled by default). When `outputDirectory` ends in `.xcassets`, `Symbols.swift` is redirected to the catalog's parent directory (Xcode treats asset catalogs as leaves — sources inside them never compile); `swiftSourceOutputDirectory` overrides the location explicitly.
+- `plugin/SwiftUIConfig.kt` - `swiftUI { }` DSL configuration (enabled, outputDirectory, scaleFactor, generateSwiftEnum, swiftSourceOutputDirectory; disabled by default). When `outputDirectory` IS an `.xcassets` bundle or lives INSIDE one (matched case-insensitively), `Symbols.swift` is redirected to the catalog's parent directory (Xcode treats asset catalogs as leaves — sources inside them never compile); `swiftSourceOutputDirectory` overrides the location explicitly. Both locations are wired into `GenerateSymbolsTask` as declared `@Optional @OutputDirectory` outputs via lazy providers (no `afterEvaluate`).
 - `converter/SymbolSetGenerator.kt` - Pure Kotlin generator (no Gradle types, unit-testable)
 - `tasks/internal/SymbolSetGenerationCoordinator.kt` - Pipeline collaborator; reuses the download phase's temp SVGs, so no extra downloads are triggered
 
@@ -379,6 +393,10 @@ abstract class IconNameTransformer {
 ./gradlew publishPlugins           # Requires API key configuration
 ```
 
+> ⚠️ **Dormant on this fork** — the plugin is not on the Portal and no `GRADLE_PUBLISH_*` secrets
+> exist. The CI job is gated behind the `ENABLE_GRADLE_PORTAL` repository variable; set it to
+> `true` (and add the secrets) to activate.
+
 ### 2.5 Publish to GitHub Packages (no Sonatype namespace verification required)
 ```bash
 # Local publish (requires a PAT with read:packages / write:packages)
@@ -395,6 +413,10 @@ abstract class IconNameTransformer {
 ```bash
 ./gradlew publishToMavenCentral    # Requires signing configuration
 ```
+
+> ⚠️ **Dormant on this fork** — the plugin is not on Maven Central and no OSSRH/signing secrets
+> exist. The CI job is gated behind the `ENABLE_MAVEN_CENTRAL` repository variable; set it to
+> `true` (and add the secrets) to activate.
 
 **Configuration requirements**:
 - `gradle.properties` or environment variables:
@@ -453,7 +475,8 @@ cacheDirectory.set("""C:\Temp\SymbolCraft""")
 - ✅ `MaterialSymbolsConfigTest` - Material Symbols configuration model
 - ✅ `LocalIconsBuilderTest` - Local SVG discovery (⚠️ currently failing on Windows due to glob handling - pre-existing upstream issue)
 - ✅ `GenerateSymbolsTaskTest` - TestKit integration tests (⚠️ same pre-existing local-icons issue)
-- ✅ `SymbolSetGeneratorTest` - `.symbolset` generation (20 cases: template structure, guide constants, geometry centering, weight mapping, determinism, name sanitization)
+- ✅ `SymbolSetGeneratorTest` - `.symbolset` generation (30 cases: template structure, guide constants, geometry centering, weight mapping, determinism, name sanitization, Swift enum emission, fill-rule preservation, scaleFactor validation, duplicate-name handling)
+- ✅ `SwiftUISourceDirResolutionTest` - `Symbols.swift` placement rules (8 cases: plain folder, `.xcassets` root/child/uppercase/exact-name redirect, relative/absolute override, blank fallback)
 
 ---
 
@@ -719,7 +742,19 @@ docs(readme): update installation guide
 
 ## Changelog
 
-### v0.6.2 (latest)
+### v0.6.3 (latest)
+- 🛠️ **Gradle output contract fixed**: `Symbols.swift`'s write location is now a declared `@Optional @OutputDirectory` on `GenerateSymbolsTask` (`swiftUISourceDir`), resolved via lazy providers at configuration time — no more `afterEvaluate`, no undeclared outputs, correct up-to-date/build-cache behavior. `GenerationContext` carries both SwiftUI directories as the single source of truth.
+- 🧭 **`.xcassets` detection generalized**: the redirect now matches a catalog anywhere in the output path (case-insensitive), so a dedicated child like `Assets.xcassets/SymbolCraft` (recommended — keeps the task output from overlapping your hand-managed assets) also redirects `Symbols.swift` to the catalog parent.
+- 🧹 **Stale-file hygiene**: the pre-generation cleaner and `cleanSymbolCraftIcons` now remove generated `Symbols.swift` from the source location too (output dir, catalog parent, custom dir), guarded by the `// Generated by SymbolCraft` header check so user files are never deleted; `cleanSymbolCraftIcons` also removes `.symbolset` bundles.
+- 🎨 **SVG fidelity**: `fill-rule`/`clip-rule` attributes are preserved through `.symbolset` generation (Bootstrap Icons/Heroicons holes render correctly); single-quoted SVG attributes accepted; a warning is logged when a `<path>` carries an ignored `transform`.
+- 🛡️ **Fail-fast validation**: non-positive/non-finite `scaleFactor` rejected; duplicate symbol set names after sanitization fail with an actionable message; `generateSwiftEnumFile` creates missing output directories and dedupes Swift case names that collide with each other or with reserved members (`pointScale`, `allCases`, `image`, `rawValue`).
+- 🔌 **Compile wiring widened**: added `org.jetbrains.kotlin.js`, `com.android.dynamic-feature`, `com.android.test` to the type-based `KotlinCompileTool` wiring; a diagnostic is logged if the reflective lookup ever fails.
+- ⚙️ **CI/release hardening**: `notify` now tracks the GitHub Packages job; Portal/Maven Central jobs are dormant behind `ENABLE_GRADLE_PORTAL`/`ENABLE_MAVEN_CENTRAL` repo variables; release job fails fast when the commit-message version doesn't match `build.gradle.kts`; GitHub Packages publish is skipped when the version already exists (no more 409); release notes document the GitHub Packages install.
+- 🔧 **Internals**: config hash uses SHA-256 instead of `String.hashCode()`; duplicate task-input registrations removed; `projectBuildDir` wired lazily; POM license `distribution` corrected to `repo`.
+- 🧪 **Tests**: 8 new `SymbolSetGeneratorTest` cases + 3 new `SwiftUISourceDirResolutionTest` cases.
+- 📝 **Docs**: README log samples/error messages corrected, example baseline and `Config.xcconfig` bundle id fixed, AGENTS.md structure tree completed.
+
+### v0.6.2
 - 🍏 **`.xcassets`-compatible Swift sources**: new optional `swiftSourceOutputDirectory` DSL property. When `swiftUI.outputDirectory` points at an Xcode asset catalog (so `.symbolset` bundles compile via a synchronized group without the manual drag-in step), `Symbols.swift` is now written to the catalog's parent directory instead of inside it — Xcode treats catalogs as leaves, so Swift sources inside `.xcassets` were invisible to the compiler, making `generateSwiftEnum` and catalog output mutually exclusive. Stale in-catalog `Symbols.swift` copies are removed by the pre-generation cleaner.
 - 🧪 **Tests**: new `SwiftUISourceDirResolutionTest` (5 cases: plain folder, `.xcassets` redirect, relative/absolute override, blank fallback).
 

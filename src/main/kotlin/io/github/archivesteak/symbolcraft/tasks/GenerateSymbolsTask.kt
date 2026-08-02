@@ -47,6 +47,9 @@ abstract class GenerateSymbolsTask : DefaultTask() {
     /** SwiftUI `.symbolset` output directory; only present when SwiftUI output is enabled. */
     @get:Optional @get:OutputDirectory abstract val swiftUIOutputDir: DirectoryProperty
 
+    /** Directory where `Symbols.swift` is written; only present when SwiftUI output is enabled. */
+    @get:Optional @get:OutputDirectory abstract val swiftUISourceDir: DirectoryProperty
+
     @get:Input abstract val cacheDirectory: Property<String>
 
     @get:Input abstract val gradleUserHomeDir: Property<String>
@@ -97,6 +100,8 @@ abstract class GenerateSymbolsTask : DefaultTask() {
                 outputDir = outputDir.get().asFile,
                 cacheDirectory = cacheDirectory.get(),
                 projectBuildDir = projectBuildDir.get(),
+                swiftUIOutputDir = swiftUIOutputDir.orNull?.asFile,
+                swiftUISourceDir = swiftUISourceDir.orNull?.asFile,
             )
         return contextFactory.create()
     }

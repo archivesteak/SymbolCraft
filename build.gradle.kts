@@ -14,7 +14,7 @@ plugins {
 
 group = "io.github.archivesteak"
 
-version = "0.6.2"
+version = "0.6.3"
 
 kotlin { jvmToolchain(17) }
 
@@ -86,7 +86,7 @@ mavenPublishing {
             license {
                 name.set("Apache License 2.0")
                 url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
-                distribution.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
+                distribution.set("repo")
             }
         }
 

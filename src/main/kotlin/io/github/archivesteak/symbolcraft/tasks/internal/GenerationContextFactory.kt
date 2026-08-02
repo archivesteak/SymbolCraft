@@ -17,19 +17,12 @@ internal class GenerationContextFactory(
     private val outputDir: File,
     private val cacheDirectory: String,
     private val projectBuildDir: String,
+    private val swiftUIOutputDir: File?,
+    private val swiftUISourceDir: File?,
 ) {
 
     fun create(): GenerationContext {
         val cacheBaseDir = PathUtils.resolveCacheDirectory(cacheDirectory, projectBuildDir)
-
-        val swiftUIOutputDir =
-            if (extension.swiftUIConfig.enabled.get()) {
-                val configured = extension.swiftUIConfig.outputDirectory.get()
-                val file = File(configured)
-                if (file.isAbsolute) file else File(extension.projectDirectory.get(), configured)
-            } else {
-                null
-            }
 
         return GenerationContext(
             extension = extension,
@@ -41,6 +34,7 @@ internal class GenerationContextFactory(
             outputDir = outputDir,
             projectBuildDir = projectBuildDir,
             swiftUIOutputDir = swiftUIOutputDir,
+            swiftUISourceDir = swiftUISourceDir,
         )
     }
 }
@@ -62,4 +56,6 @@ internal data class GenerationContext(
     val outputDir: File,
     val projectBuildDir: String,
     val swiftUIOutputDir: File?,
+    /** Directory where `Symbols.swift` is written; only present when SwiftUI output is enabled. */
+    val swiftUISourceDir: File?,
 )

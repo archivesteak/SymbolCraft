@@ -25,7 +25,10 @@ class SymbolSetGenerator(private val logger: (String) -> Unit = {}) {
     /** A generated `.symbolset` bundle. */
     data class SymbolSetResult(val symbolSetName: String, val directory: File)
 
-    internal data class ParsedSvg(val viewBox: ViewBox, val paths: List<String>)
+    internal data class ParsedSvg(val viewBox: ViewBox, val paths: List<SvgPath>)
+
+    /** One `<path>` element: geometry plus the fill attributes that affect rendering. */
+    internal data class SvgPath(val d: String, val fillRule: String?, val clipRule: String?)
 
     internal data class ViewBox(
         val x: Double,
@@ -59,6 +62,15 @@ class SymbolSetGenerator(private val logger: (String) -> Unit = {}) {
         scaleFactor: Double,
     ): List<SymbolSetResult> {
         val specs = buildSpecs(configs, libraryTempDir, nameTransformer)
+
+        // Two configs can sanitize to the same asset name ("a b" vs "a-b"); the second bundle
+        // would silently overwrite the first on disk. Fail fast with an actionable message.
+        val duplicates = specs.groupingBy { it.name }.eachCount().filterValues { it > 1 }
+        require(duplicates.isEmpty()) {
+            "Duplicate symbol set names in library $libraryId: ${duplicates.keys.joinToString()}. " +
+                "Rename the colliding icons or adjust the naming configuration."
+        }
+
         val results = mutableListOf<SymbolSetResult>()
 
         specs.forEach { spec ->
@@ -166,6 +178,9 @@ class SymbolSetGenerator(private val logger: (String) -> Unit = {}) {
         scaleFactor: Double,
     ): String {
         require(glyphs.isNotEmpty()) { "At least one glyph source is required" }
+        require(scaleFactor.isFinite() && scaleFactor > 0.0) {
+            "scaleFactor must be a positive finite number, was: $scaleFactor"
+        }
 
         // Base scale: fit the glyph viewBox to the M-scale cap height, then apply the proven
         // 1.7× optical enlargement (both reference converters use it) and the user factor.
@@ -202,7 +217,11 @@ class SymbolSetGenerator(private val logger: (String) -> Unit = {}) {
                     "  <g id=\"$weight-$scale\" transform=\"matrix(${fmt(finalScale)} 0 0 " +
                         "${fmt(finalScale)} ${fmt(tx)} ${fmt(ty)})\">\n"
                 )
-                source.paths.forEach { d -> variants.append("   <path d=\"$d\"/>\n") }
+                source.paths.forEach { path ->
+                    val fillRuleAttr = path.fillRule?.let { " fill-rule=\"$it\"" } ?: ""
+                    val clipRuleAttr = path.clipRule?.let { " clip-rule=\"$it\"" } ?: ""
+                    variants.append("   <path d=\"${path.d}\"$fillRuleAttr$clipRuleAttr/>\n")
+                }
                 variants.append("  </g>\n")
             }
         }
@@ -319,9 +338,22 @@ class SymbolSetGenerator(private val logger: (String) -> Unit = {}) {
         outputDirectory: File,
         scaleFactor: Double = 1.0,
     ): File {
+        require(scaleFactor.isFinite() && scaleFactor > 0.0) {
+            "scaleFactor must be a positive finite number, was: $scaleFactor"
+        }
+
+        // Case names must be unique AND must not shadow the helper members below
+        // (pointScale, image, rawValue) or CaseIterable's synthesized allCases. Collisions get a
+        // deterministic numeric suffix; the raw value always keeps the true asset name.
+        val usedCaseNames = RESERVED_SWIFT_MEMBERS.toMutableSet()
         val cases =
             symbolSetNames.sorted().joinToString("\n") { name ->
-                val caseName = swiftCaseName(name)
+                val base = swiftCaseName(name)
+                var caseName = base
+                var suffix = 2
+                while (!usedCaseNames.add(caseName)) {
+                    caseName = "$base${suffix++}"
+                }
                 if (caseName == name) "    case $caseName" else "    case $caseName = \"$name\""
             }
 
@@ -364,6 +396,7 @@ class SymbolSetGenerator(private val logger: (String) -> Unit = {}) {
         }
 
         val file = File(outputDirectory, "Symbols.swift")
+        outputDirectory.mkdirs()
         file.writeText(content)
         return file
     }
@@ -390,7 +423,24 @@ class SymbolSetGenerator(private val logger: (String) -> Unit = {}) {
                     ViewBox(0.0, 0.0, width ?: 24.0, height ?: 24.0)
                 }
 
-        val paths = PATH_REGEX.findAll(content).map { it.groupValues[1] }.toList()
+        val paths =
+            PATH_TAG_REGEX.findAll(content)
+                .map { match ->
+                    val tag = match.groupValues[1]
+                    if (TRANSFORM_ATTR_REGEX.containsMatchIn(tag)) {
+                        logger(
+                            "      ⚠️ <path> in ${svgFile.name} carries a transform attribute; " +
+                                "it is ignored and the glyph may render shifted"
+                        )
+                    }
+                    SvgPath(
+                        d = PATH_D_REGEX.find(tag)?.groupValues?.get(1) ?: return@map null,
+                        fillRule = FILL_RULE_REGEX.find(tag)?.groupValues?.get(1),
+                        clipRule = CLIP_RULE_REGEX.find(tag)?.groupValues?.get(1),
+                    )
+                }
+                .filterNotNull()
+                .toList()
         require(paths.isNotEmpty()) {
             "No <path> elements found in SVG: ${svgFile.name}. " +
                 "Only path-based SVGs can be converted to SF Symbols."
@@ -481,6 +531,9 @@ class SymbolSetGenerator(private val logger: (String) -> Unit = {}) {
         // height at render time, which is what ties .symbolset glyph size to the font point size.
         const val CAP_HEIGHT_TO_EM_RATIO = 0.7
 
+        // Enum members generated alongside the icon cases; a colliding icon name gets suffixed.
+        val RESERVED_SWIFT_MEMBERS = setOf("pointScale", "allCases", "image", "rawValue")
+
         const val MARGIN_PADDING = 4.5
 
         val WEIGHTS =
@@ -522,10 +575,17 @@ class SymbolSetGenerator(private val logger: (String) -> Unit = {}) {
                 "Black" to 1.015,
             )
 
-        val VIEW_BOX_REGEX = Regex("viewBox=\"([^\"]+)\"")
-        val WIDTH_REGEX = Regex("<svg[^>]*\\bwidth=\"([^\"]+)\"")
-        val HEIGHT_REGEX = Regex("<svg[^>]*\\bheight=\"([^\"]+)\"")
-        val PATH_REGEX = Regex("<path\\b[^>]*?\\bd=\"([^\"]*)\"")
+        val VIEW_BOX_REGEX = Regex("viewBox\\s*=\\s*[\"']([^\"']+)[\"']")
+        val WIDTH_REGEX = Regex("<svg[^>]*\\bwidth\\s*=\\s*[\"']([^\"']+)[\"']")
+        val HEIGHT_REGEX = Regex("<svg[^>]*\\bheight\\s*=\\s*[\"']([^\"']+)[\"']")
+
+        // Path parsing keeps the whole opening tag so fill/clip rules survive; only the geometry
+        // attribute `d` is mandatory. Both quote styles are accepted.
+        val PATH_TAG_REGEX = Regex("<path\\b([^>]*?)/?\\s*>")
+        val PATH_D_REGEX = Regex("\\bd\\s*=\\s*[\"']([^\"']*)[\"']")
+        val FILL_RULE_REGEX = Regex("\\bfill-rule\\s*=\\s*[\"']([^\"']+)[\"']")
+        val CLIP_RULE_REGEX = Regex("\\bclip-rule\\s*=\\s*[\"']([^\"']+)[\"']")
+        val TRANSFORM_ATTR_REGEX = Regex("\\btransform\\s*=")
 
         val SWIFT_KEYWORDS =
             setOf(

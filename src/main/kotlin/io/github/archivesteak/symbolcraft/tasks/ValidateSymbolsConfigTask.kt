@@ -9,7 +9,7 @@ import org.gradle.api.tasks.TaskAction
 /**
  * Task that validates the DSL configuration before generation.
  *
- * Exposed to consumers as `validateSymbolsConfig`.
+ * Exposed to consumers as `validateSymbolCraftConfig`.
  */
 abstract class ValidateSymbolsConfigTask : DefaultTask() {
     @get:Internal abstract val extension: Property<SymbolCraftExtension>

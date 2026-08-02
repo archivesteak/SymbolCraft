@@ -29,6 +29,33 @@ class SwiftUISourceDirResolutionTest {
     }
 
     @Test
+    fun `output inside an xcassets child redirects to the catalog parent`() {
+        val child = File(projectDir, "Assets.xcassets/SymbolCraft")
+        assertEquals(
+            projectDir,
+            SymbolSetGenerationCoordinator.resolveSwiftSourceDir(null, child, projectDir),
+        )
+    }
+
+    @Test
+    fun `xcassets suffix matching is case-insensitive`() {
+        val catalog = File(projectDir, "Assets.XCAssets")
+        assertEquals(
+            projectDir,
+            SymbolSetGenerationCoordinator.resolveSwiftSourceDir(null, catalog, projectDir),
+        )
+    }
+
+    @Test
+    fun `dir named exactly dot-xcassets redirects to its parent`() {
+        val catalog = File(projectDir, ".xcassets")
+        assertEquals(
+            projectDir,
+            SymbolSetGenerationCoordinator.resolveSwiftSourceDir(null, catalog, projectDir),
+        )
+    }
+
+    @Test
     fun `explicit relative path resolves against the project directory`() {
         val outputDir = File(projectDir, "Assets.xcassets")
         assertEquals(

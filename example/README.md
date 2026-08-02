@@ -11,11 +11,12 @@ This example showcases:
 - **External icon libraries**: MDI, esm.sh Material Symbols, and Simple Icons
 - **Local SVG files**: Checked-in project icons from Compose resources
 - **Compose Preview**: Generated preview functions for all icons
+- **SwiftUI output**: Custom SF Symbol `.symbolset` bundles + `Symbols.swift` in `iosApp/GeneratedSymbols`
 - **Modern configuration**: Using the latest SymbolCraft DSL features
 
 ## Version Baseline
 
-- **SymbolCraft**: 0.5.0
+- **SymbolCraft**: 0.6.3
 - **Compose Multiplatform**: 1.11.1
 - **Kotlin**: 2.3.21
 - **Preview annotation**: `androidx.compose.ui.tooling.preview.Preview`
@@ -36,6 +37,7 @@ example/
 │   │   └── jvmMain/              # Desktop-specific code
 │   └── build.gradle.kts          # SymbolCraft configuration
 └── iosApp/                        # iOS app wrapper
+    └── GeneratedSymbols/          # .symbolset bundles + Symbols.swift (SwiftUI output)
 ```
 
 ## SymbolCraft Configuration
@@ -60,6 +62,12 @@ symbolCraft {
     // Icon naming configuration
     naming {
         pascalCase()  // Use PascalCase convention
+    }
+
+    // SwiftUI output (custom SF Symbols for the iOS app)
+    swiftUI {
+        enabled.set(true)
+        outputDirectory.set("iosApp/GeneratedSymbols")
     }
 
     // Material Symbols examples

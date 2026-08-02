@@ -28,7 +28,7 @@ abstract class CleanSymbolsCacheTask : DefaultTask() {
         // Resolve cache directory: support both absolute and relative paths
         val cacheBaseDir = PathUtils.resolveCacheDirectory(cacheDirPath, projectBuildDirPath)
 
-        logger.lifecycle("🧹 Cleaning Material Symbols cache...")
+        logger.lifecycle("🧹 Cleaning SymbolCraft icon cache...")
         logger.lifecycle("📂 Cache location: ${cacheBaseDir.absolutePath}")
 
         if (cacheBaseDir.exists()) {

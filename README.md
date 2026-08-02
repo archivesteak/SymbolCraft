@@ -15,7 +15,7 @@ A powerful Gradle plugin for generating icons on-demand from multiple icon libra
 - 🔧 **Smart DSL** - Convenient batch configuration methods and preset styles
 - 📚 **Multi-library support** - Use icons from Material Symbols, Bootstrap Icons, Heroicons, Feather Icons, and any custom icon library via URL templates
 - 📱 **High-quality output** - Use svg-to-compose library to generate authentic SVG path data
-- 🔄 **Incremental builds** - Gradle task caching support, only regenerate changed icons
+- 🔄 **Incremental builds** - Gradle task caching support — unchanged configurations are skipped entirely
 - 🏗️ **Configuration cache compatible** - Fully supports Gradle configuration cache for improved build performance
 - 🔗 **Multi-platform support** - Support Android, Kotlin Multiplatform, JVM projects
 - 👀 **Compose Preview** - Auto-generate Compose Preview functions
@@ -143,18 +143,18 @@ Run the following command to generate configured icons:
 The generation process will show detailed progress:
 ```
 🎨 Generating icons...
-📊 Icons to generate: 12
+📊 Icons to generate: 12 total
 ⬇️ Downloading SVG files...
-   Progress: 5/12
-   Progress: 10/12
-   Progress: 12/12
-✅ Download completed:
+   Download progress: 5/12
+   Download progress: 10/12
+   Download progress: 12/12
+✅ Processing completed:
    📁 Total: 12
    ✅ Success: 12
    ❌ Failed: 0
-   💾 From cache: 8
+   💾 From cache: 8 (remote icons only)
 🔄 Converting SVGs to Compose ImageVectors...
-✅ Successfully converted 12 icons
+✅ Successfully converted 12 icons total
 📦 SVG Cache: 45 files, 2.31 MB
 ```
 
@@ -311,12 +311,12 @@ symbolCraft {
 }
 ```
 
-**Pointing `outputDirectory` at your `.xcassets`** (recommended — the `.symbolset` bundles then compile automatically via a synchronized group, no manual drag-into-Xcode step): Xcode treats an asset catalog as a leaf, so Swift sources inside it are invisible to the compiler. SymbolCraft handles this: when `outputDirectory` ends in `.xcassets`, `Symbols.swift` is automatically written to the catalog's **parent** directory instead of inside it. Set `swiftSourceOutputDirectory` to override the location entirely.
+**Pointing `outputDirectory` into your `.xcassets`** (recommended — the `.symbolset` bundles then compile automatically via a synchronized group, no manual drag-into-Xcode step): use a **dedicated child folder** of the catalog, e.g. `iosApp/Assets.xcassets/SymbolCraft`, so the Gradle task output never overlaps your hand-managed assets. Xcode treats an asset catalog as a leaf, so Swift sources anywhere inside it are invisible to the compiler — SymbolCraft detects a catalog anywhere in the output path (case-insensitively) and writes `Symbols.swift` to the catalog's **parent** directory instead. Set `swiftSourceOutputDirectory` to override the location entirely.
 
 ```kotlin
 swiftUI {
     enabled.set(true)
-    outputDirectory.set("iosApp/Assets.xcassets")   // bundles compile via synchronized group
+    outputDirectory.set("iosApp/Assets.xcassets/SymbolCraft")  // bundles compile via synchronized group
     // Symbols.swift lands in iosApp/ — add it to your app target once
 }
 ```
@@ -557,15 +557,14 @@ SymbolCraft includes a Dokka V2 setup so you can publish API documentation for t
 ### Generate documentation locally
 
 ```bash
-# Javadoc-style output (used for Maven Central / Plugin Portal publishing)
+# Javadoc-style output (attached to published artifacts)
 ./gradlew dokkaGeneratePublicationJavadoc
 
 # Optional: modern HTML format
 ./gradlew dokkaGeneratePublicationHtml
 ```
 
-Both tasks emit their output under `build/dokka/`. Open `build/dokka/javadoc/index.html` (or `build/dokka/html/index.html`) in your browser to review the generated docs.  
-If you enabled the compatibility alias in your build, `./gradlew dokkaJavadoc` will forward to the Javadoc task as well.
+Both tasks emit their output under `build/dokka/`. Open `build/dokka/javadoc/index.html` (or `build/dokka/html/index.html`) in your browser to review the generated docs.
 
 > **Note:** The project defaults to Dokka V2 with `org.jetbrains.dokka.experimental.gradle.pluginMode` set to `V2Enabled`. This means the modern Dokka task names are used directly. If you need to use older task names for compatibility, you can temporarily switch the mode to `V2EnabledWithHelpers` in `gradle.properties`.
 
@@ -703,11 +702,11 @@ rm -rf /var/tmp/symbolcraft
 
 ### Cache statistics
 
-After generation completes, cache usage will be displayed:
+During generation, cache usage will be displayed:
 ```
-📦 SVG Cache: 45 files, 2.31 MB
-💾 From cache: 8/12 icons
 🧹 Cleaned 3 unused cache files
+💾 From cache: 8 (remote icons only)
+📦 SVG Cache: 45 files, 2.31 MB
 ```
 
 ## 🚀 Performance Optimization
@@ -735,8 +734,8 @@ After generation completes, cache usage will be displayed:
 ### Error handling
 
 - Automatic retry for network errors
-- Detailed error classification and suggestions
-- Graceful degradation to backup generators
+- Failed icons are skipped with a warning
+- Detailed error classification and suggestions when the build fails
 
 ## 📝 Advanced Configuration
 
@@ -930,7 +929,7 @@ symbolCraft {
 
 3. **Icon not found**
    ```
-   ⚠️ Failed to download: icon-name-W400Outlined (Icon not found in Material Symbols)
+   ❌ Error downloading search-W400Outlined: Icon not found
    ```
    Check if the icon name exists in [Material Symbols Demo](https://marella.github.io/material-symbols/demo/)
 
@@ -962,13 +961,13 @@ symbolCraft {
 ### Core components
 
 - **SymbolCraftPlugin** - Main plugin class that registers tasks and wires the extension
-- **SymbolCraftExtension** - DSL configuration interface with MaterialSymbolsBuilder and ExternalIconBuilder
+- **SymbolCraftExtension** - DSL configuration interface with MaterialSymbolsBuilder, ExternalIconBuilder and LocalIconsBuilder
 - **GenerateSymbolsTask** - Core generation task with parallel downloads and configurable retry logic
 - **NamingConfig** - Icon naming transformation configuration
 - **IconNameTransformer** - Flexible naming convention transformer
 - **SvgDownloader** - Smart SVG downloader with 7-day caching and retry mechanism
 - **Svg2ComposeConverter** - SVG to Compose converter using svg-to-compose library
-- **IconConfig** - Base interface for icon library configurations (MaterialSymbolsConfig, ExternalIconConfig)
+- **IconConfig** - Base interface for icon library configurations (MaterialSymbolsConfig, ExternalIconConfig, LocalIconConfig)
 - **SymbolWeight/SymbolVariant/SymbolFill** - Material Symbols style enums
 
 ### Data flow

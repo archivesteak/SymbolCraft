@@ -171,12 +171,14 @@ jobs:
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         echo "Extracted version: $VERSION"
 
-    - name: Update version in build files
+    - name: Verify version matches the committed build file
       run: |
         VERSION=${{ steps.extract_version.outputs.version }}
-        # Update version in build.gradle.kts
-        sed -i "s/version = \".*\"/version = \"$VERSION\"/" build.gradle.kts
-        echo "Updated version to $VERSION"
+        if ! grep -q "version = \"$VERSION\"" build.gradle.kts; then
+          echo "❌ Commit message says v$VERSION but build.gradle.kts has a different version."
+          echo "Bump version in build.gradle.kts before making the release commit."
+          exit 1
+        fi
 
     - name: Build release artifacts
       run: ./gradlew build publishToMavenLocal --stacktrace
@@ -203,15 +205,31 @@ jobs:
 
           Generate icons on-demand from multiple libraries (Material Symbols, Bootstrap Icons, etc.) for Compose Multiplatform with smart caching.
 
-          ### 📦 Installation
+          ### 📦 Installation (GitHub Packages)
           ```kotlin
+          // settings.gradle.kts
+          pluginManagement {
+              repositories {
+                  maven {
+                      url = uri("https://maven.pkg.github.com/archivesteak/SymbolCraft")
+                      credentials {
+                          username = providers.gradleProperty("gpr.user").orNull
+                          password = providers.gradleProperty("gpr.key").orNull
+                      }
+                  }
+                  gradlePluginPortal()
+              }
+          }
+          // build.gradle.kts
           plugins {
               id("io.github.archivesteak.symbolcraft") version "${{ steps.extract_version.outputs.version }}"
           }
           ```
+          GitHub Packages requires authentication even for public packages: set `gpr.user` and
+          `gpr.key` (a PAT with `read:packages`) in `~/.gradle/gradle.properties`.
 
           ### 🔗 Links
-          - [Gradle Plugin Portal](https://plugins.gradle.org/plugin/io.github.archivesteak.symbolcraft)
+          - [GitHub Packages](https://github.com/archivesteak/SymbolCraft/packages)
           - [Documentation](https://github.com/archivesteak/SymbolCraft#readme)
         files: |
           build/libs/*.jar
@@ -225,7 +243,9 @@ jobs:
     name: Publish to Gradle Plugin Portal
     runs-on: ubuntu-latest
     needs: release
-    if: github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'chore(release):')
+    # Dormant on this fork (no GRADLE_PUBLISH_* secrets, not on the Portal).
+    # Set the ENABLE_GRADLE_PORTAL repository variable to 'true' to activate.
+    if: github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'chore(release):') && vars.ENABLE_GRADLE_PORTAL == 'true'
 
     steps:
     - name: Checkout code
@@ -249,11 +269,6 @@ jobs:
         COMMIT_MSG="${{ github.event.head_commit.message }}"
         VERSION=$(echo "$COMMIT_MSG" | grep -oP 'chore\(release\):\s*v\K[0-9]+\.[0-9]+\.[0-9]+')
         echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-    - name: Update version in build files
-      run: |
-        VERSION=${{ steps.extract_version.outputs.version }}
-        sed -i "s/version = \".*\"/version = \"$VERSION\"/" build.gradle.kts
 
     - name: Publish to Gradle Plugin Portal
       env:
@@ -265,7 +280,9 @@ jobs:
     name: Publish to Maven Central
     runs-on: ubuntu-latest
     needs: release
-    if: github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'chore(release):')
+    # Dormant on this fork (no OSSRH_*/signing secrets, not on Maven Central).
+    # Set the ENABLE_MAVEN_CENTRAL repository variable to 'true' to activate.
+    if: github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'chore(release):') && vars.ENABLE_MAVEN_CENTRAL == 'true'
 
     steps:
     - name: Checkout code
@@ -289,11 +306,6 @@ jobs:
         COMMIT_MSG="${{ github.event.head_commit.message }}"
         VERSION=$(echo "$COMMIT_MSG" | grep -oP 'chore\(release\):\s*v\K[0-9]+\.[0-9]+\.[0-9]+')
         echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-    - name: Update version in build files
-      run: |
-        VERSION=${{ steps.extract_version.outputs.version }}
-        sed -i "s/version = \".*\"/version = \"$VERSION\"/" build.gradle.kts
 
     - name: Publish to Maven Central
       env:
@@ -335,12 +347,21 @@ jobs:
         VERSION=$(echo "$COMMIT_MSG" | grep -oP 'chore\(release\):\s*v\K[0-9]+\.[0-9]+\.[0-9]+')
         echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-    - name: Update version in build files
+    - name: Check if version is already published
+      id: published_check
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         VERSION=${{ steps.extract_version.outputs.version }}
-        sed -i "s/version = \".*\"/version = \"$VERSION\"/" build.gradle.kts
+        if gh api "/users/${{ github.repository_owner }}/packages/maven/io.github.archivesteak.symbolcraft/versions" --jq '.[].name' | grep -qx "$VERSION"; then
+          echo "Version $VERSION already exists on GitHub Packages; skipping publish."
+          echo "exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "exists=false" >> $GITHUB_OUTPUT
+        fi
 
     - name: Publish to GitHub Packages
+      if: steps.published_check.outputs.exists != 'true'
       env:
         GITHUB_ACTOR: ${{ github.actor }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -349,29 +370,20 @@ jobs:
   notify:
     name: Notify
     runs-on: ubuntu-latest
-    needs: [publish-gradle-plugin, publish-maven-central]
+    needs: [publish-github-packages]
     if: always() && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'chore(release):')
 
     steps:
     - name: Notify success
-      if: needs.publish-gradle-plugin.result == 'success' && needs.publish-maven-central.result == 'success'
+      if: needs.publish-github-packages.result == 'success'
       run: |
         echo "🎉 SymbolCraft release completed successfully!"
-        echo "✅ Plugin published to Gradle Plugin Portal"
-        echo "✅ Plugin published to Maven Central"
-        echo "🔗 Gradle Portal: https://plugins.gradle.org/plugin/io.github.archivesteak.symbolcraft"
-        echo "🔗 Maven Central: https://central.sonatype.com/artifact/io.github.archivesteak/symbolcraft"
-
-    - name: Notify partial success
-      if: (needs.publish-gradle-plugin.result == 'success' && needs.publish-maven-central.result != 'success') || (needs.publish-gradle-plugin.result != 'success' && needs.publish-maven-central.result == 'success')
-      run: |
-        echo "⚠️ SymbolCraft release partially completed!"
-        echo "Gradle Portal: ${{ needs.publish-gradle-plugin.result }}"
-        echo "Maven Central: ${{ needs.publish-maven-central.result }}"
+        echo "✅ Plugin published to GitHub Packages"
+        echo "🔗 https://github.com/archivesteak/SymbolCraft/packages"
 
     - name: Notify failure
-      if: needs.publish-gradle-plugin.result == 'failure' && needs.publish-maven-central.result == 'failure'
+      if: needs.publish-github-packages.result != 'success'
       run: |
         echo "❌ SymbolCraft release failed!"
-        echo "🔍 Check the logs for details"
-        echo "📋 Common issues: Gradle Portal credentials, Maven Central credentials, version conflicts"
+        echo "GitHub Packages: ${{ needs.publish-github-packages.result }}"
+        echo "🔍 Check the publish-github-packages logs for details"

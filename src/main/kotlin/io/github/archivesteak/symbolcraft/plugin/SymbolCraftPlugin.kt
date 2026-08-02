@@ -4,6 +4,8 @@ import io.github.archivesteak.symbolcraft.tasks.CleanSymbolsCacheTask
 import io.github.archivesteak.symbolcraft.tasks.CleanSymbolsIconsTask
 import io.github.archivesteak.symbolcraft.tasks.GenerateSymbolsTask
 import io.github.archivesteak.symbolcraft.tasks.ValidateSymbolsConfigTask
+import io.github.archivesteak.symbolcraft.tasks.internal.SymbolSetGenerationCoordinator
+import java.io.File
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 
@@ -19,6 +21,46 @@ class SymbolCraftPlugin : Plugin<Project> {
         val extension = project.extensions.create("symbolCraft", SymbolCraftExtension::class.java)
         extension.projectDirectory.set(project.layout.projectDirectory.asFile.absolutePath)
 
+        val swiftUI = extension.swiftUIConfig
+        val projectDir = project.layout.projectDirectory.asFile
+
+        // Lazily resolved SwiftUI output locations. The providers carry no value when SwiftUI
+        // output is disabled, so the @Optional task outputs stay unset. Provider-based wiring
+        // (instead of afterEvaluate) also honors consumer configuration applied late in build
+        // script evaluation, and keeps every SwiftUI write location a declared task output.
+        val symbolSetDirProvider =
+            swiftUI.enabled.flatMap { enabled ->
+                if (enabled) {
+                    swiftUI.outputDirectory.map { configured ->
+                        File(configured).let {
+                            if (it.isAbsolute) it else File(projectDir, configured)
+                        }
+                    }
+                } else {
+                    project.providers.provider<File> { null }
+                }
+            }
+        val swiftSourceDirProvider =
+            symbolSetDirProvider.flatMap { symbolSetDir ->
+                swiftUI.swiftSourceOutputDirectory
+                    .map { configured ->
+                        SymbolSetGenerationCoordinator.resolveSwiftSourceDir(
+                            configured,
+                            symbolSetDir,
+                            projectDir,
+                        )
+                    }
+                    .orElse(
+                        project.providers.provider {
+                            SymbolSetGenerationCoordinator.resolveSwiftSourceDir(
+                                null,
+                                symbolSetDir,
+                                projectDir,
+                            )
+                        }
+                    )
+            }
+
         val generateTaskProvider =
             project.tasks.register("generateSymbolCraftIcons", GenerateSymbolsTask::class.java) {
                 task ->
@@ -28,32 +70,18 @@ class SymbolCraftPlugin : Plugin<Project> {
                 task.outputDir.set(project.layout.projectDirectory.dir(extension.outputDirectory))
                 task.cacheDirectory.set(extension.cacheDirectory)
                 task.gradleUserHomeDir.set(project.gradle.gradleUserHomeDir.absolutePath)
-                task.projectBuildDir.set(project.layout.buildDirectory.get().asFile.absolutePath)
-                task.inputs.property("symbolsConfig", extension.getConfigHash())
-                task.inputs.property("generatePreview", extension.generatePreview)
-                task.inputs.property("previewAnnotationClass", extension.previewAnnotationClass)
-                task.inputs.property("namingConfigSignature", extension.namingConfigSignature())
+                task.projectBuildDir.set(
+                    project.layout.buildDirectory.map { it.asFile.absolutePath }
+                )
+                task.swiftUIOutputDir.fileProvider(symbolSetDirProvider)
+                task.swiftUISourceDir.fileProvider(swiftSourceDirProvider)
             }
-
-        project.afterEvaluate {
-            generateTaskProvider.configure { task ->
-                if (extension.swiftUIConfig.enabled.get()) {
-                    val configured = extension.swiftUIConfig.outputDirectory.get()
-                    val file =
-                        java.io.File(configured).let {
-                            if (it.isAbsolute) it
-                            else java.io.File(project.layout.projectDirectory.asFile, configured)
-                        }
-                    task.swiftUIOutputDir.fileValue(file)
-                }
-            }
-        }
 
         project.tasks.register("cleanSymbolCraftCache", CleanSymbolsCacheTask::class.java) { task ->
             task.group = "symbolcraft"
             task.description = "Clean SymbolCraft icon cache"
             task.cacheDirectory.set(extension.cacheDirectory)
-            task.projectBuildDir.set(project.layout.buildDirectory.get().asFile.absolutePath)
+            task.projectBuildDir.set(project.layout.buildDirectory.map { it.asFile.absolutePath })
         }
 
         project.tasks.register("cleanSymbolCraftIcons", CleanSymbolsIconsTask::class.java) { task ->
@@ -61,6 +89,8 @@ class SymbolCraftPlugin : Plugin<Project> {
             task.description = "Clean generated SymbolCraft icon files"
             task.packageName.set(extension.packageName)
             task.outputDirectory.set(project.layout.projectDirectory.dir(extension.outputDirectory))
+            task.swiftUIOutputDirectory.fileProvider(symbolSetDirProvider)
+            task.swiftUISourceDirectory.fileProvider(swiftSourceDirProvider)
         }
 
         project.tasks.register(
@@ -83,8 +113,11 @@ class SymbolCraftPlugin : Plugin<Project> {
                 "org.jetbrains.kotlin.jvm",
                 "org.jetbrains.kotlin.multiplatform",
                 "org.jetbrains.kotlin.android",
+                "org.jetbrains.kotlin.js",
                 "com.android.application",
                 "com.android.library",
+                "com.android.dynamic-feature",
+                "com.android.test",
                 "com.android.kotlin.multiplatform.library",
             )
         kotlinCapablePluginIds.forEach { id ->
@@ -112,6 +145,11 @@ class SymbolCraftPlugin : Plugin<Project> {
                     project.tasks.withType(compileToolType).configureEach { task ->
                         task.dependsOn(generateTaskProvider)
                     }
+                } else {
+                    project.logger.info(
+                        "SymbolCraft: KotlinCompileTool not visible after plugin '$id' was " +
+                            "applied; Kotlin compile wiring falls back to task-name matching"
+                    )
                 }
             }
         }

@@ -81,16 +81,17 @@ internal class SymbolSetGenerationCoordinator(private val logger: Logger) {
 
         if (swiftUI.generateSwiftEnum.get() && allSymbolSetNames.isNotEmpty()) {
             val swiftSourceDir =
-                resolveSwiftSourceDir(
-                    configured = swiftUI.swiftSourceOutputDirectory.orNull,
-                    outputDir = outputDir,
-                    projectDir =
-                        ext.projectDirectory.orNull?.takeIf { it.isNotBlank() }?.let(::File),
-                )
+                context.swiftUISourceDir
+                    ?: resolveSwiftSourceDir(
+                        configured = swiftUI.swiftSourceOutputDirectory.orNull,
+                        outputDir = outputDir,
+                        projectDir =
+                            ext.projectDirectory.orNull?.takeIf { it.isNotBlank() }?.let(::File),
+                    )
             if (swiftSourceDir != outputDir) {
                 logger.lifecycle(
-                    "   📁 outputDirectory is an Xcode asset catalog; writing Symbols.swift to " +
-                        swiftSourceDir.absolutePath
+                    "   📁 outputDirectory is inside an Xcode asset catalog; writing " +
+                        "Symbols.swift to ${swiftSourceDir.absolutePath}"
                 )
             }
             generator.generateSwiftEnumFile(
@@ -109,10 +110,11 @@ internal class SymbolSetGenerationCoordinator(private val logger: Logger) {
          * Decides where `Symbols.swift` lands.
          *
          * An explicit [configured] path wins (absolute, or relative to [projectDir]). Otherwise,
-         * when the symbol-set [outputDir] is an `.xcassets` bundle, the Swift source must NOT go
-         * inside it: Xcode treats asset catalogs as leaves, so neither the Swift compiler nor
-         * synchronized file-system groups ever see sources stored there. In that case the catalog's
-         * parent directory is used. Plain-folder output keeps the historical behavior of writing
+         * when the symbol-set [outputDir] IS an `.xcassets` bundle or lives INSIDE one (e.g. a
+         * dedicated `Assets.xcassets/SymbolCraft` child), the Swift source must not go there: Xcode
+         * treats asset catalogs as leaves, so neither the Swift compiler nor synchronized
+         * file-system groups ever see sources stored inside. In that case the catalog's parent
+         * directory is used. Plain-folder output keeps the historical behavior of writing
          * `Symbols.swift` next to the `.symbolset` bundles.
          */
         internal fun resolveSwiftSourceDir(
@@ -128,11 +130,14 @@ internal class SymbolSetGenerationCoordinator(private val logger: Logger) {
                     else -> file
                 }
             }
-            return if (outputDir.name.endsWith(XCODE_ASSET_CATALOG_SUFFIX)) {
-                outputDir.parentFile ?: outputDir
-            } else {
-                outputDir
+            var cursor: File? = outputDir
+            while (cursor != null) {
+                if (cursor.name.lowercase().endsWith(XCODE_ASSET_CATALOG_SUFFIX)) {
+                    return cursor.parentFile ?: outputDir
+                }
+                cursor = cursor.parentFile
             }
+            return outputDir
         }
 
         private const val XCODE_ASSET_CATALOG_SUFFIX = ".xcassets"
