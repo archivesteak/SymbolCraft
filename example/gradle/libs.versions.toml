@@ -45,4 +45,4 @@ composeHotReload = { id = "org.jetbrains.compose.hot-reload", version.ref = "com
 composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "composeMultiplatform" }
 composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
-symbolCraft = { id = "io.github.kingsword09.symbolcraft", version.ref = "symbolcraft" }
+symbolCraft = { id = "io.github.archivesteak.symbolcraft", version.ref = "symbolcraft" }

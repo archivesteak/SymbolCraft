@@ -30,6 +30,7 @@ ktor-client-cio = { group = "io.ktor", name = "ktor-client-cio", version.ref = "
 gradle-api = { group = "dev.gradleplugins", name = "gradle-api", version.ref = "gradle" }
 
 # SVG to Compose (transitive dependencies will be resolved automatically)
+# NOTE: published upstream by kingsword09; keep this coordinate until we fork/publish our own.
 svg-to-compose = { group = "io.github.kingsword09", name = "svg-to-compose", version.ref = "svg-to-compose" }
 
 # Testing

@@ -12,7 +12,7 @@ plugins {
     signing
 }
 
-group = "io.github.kingsword09"
+group = "io.github.archivesteak"
 
 version = "0.6.0"
 
@@ -52,13 +52,13 @@ dependencies {
 
 // Configure Gradle Plugin Portal publication
 gradlePlugin {
-    website = "https://github.com/kingsword09/SymbolCraft"
-    vcsUrl = "https://github.com/kingsword09/SymbolCraft"
+    website = "https://github.com/archivesteak/SymbolCraft"
+    vcsUrl = "https://github.com/archivesteak/SymbolCraft"
 
     plugins {
         create("symbolcraft") {
-            id = "io.github.kingsword09.symbolcraft"
-            implementationClass = "io.github.kingsword09.symbolcraft.plugin.SymbolCraftPlugin"
+            id = "io.github.archivesteak.symbolcraft"
+            implementationClass = "io.github.archivesteak.symbolcraft.plugin.SymbolCraftPlugin"
             displayName = "SymbolCraft - Multi-Library Icon Generator"
             description =
                 "Generate icons on-demand from multiple libraries (Material Symbols, Bootstrap Icons, etc.) for Compose Multiplatform with smart caching."
@@ -80,7 +80,7 @@ mavenPublishing {
             "Generate icons on-demand from multiple libraries (Material Symbols, Bootstrap Icons, etc.) for Compose Multiplatform with smart caching."
         )
         inceptionYear.set("2025")
-        url.set("https://github.com/kingsword09/SymbolCraft")
+        url.set("https://github.com/archivesteak/SymbolCraft")
 
         licenses {
             license {
@@ -92,17 +92,17 @@ mavenPublishing {
 
         developers {
             developer {
-                id.set("kingsword09")
-                name.set("kingsword09")
-                url.set("https://github.com/kingsword09")
-                email.set("kingsword09@gmail.com")
+                id.set("archivesteak")
+                name.set("archivesteak")
+                url.set("https://github.com/archivesteak")
+                email.set("archivesteak@gmail.com")
             }
         }
 
         scm {
-            url.set("https://github.com/kingsword09/SymbolCraft")
-            connection.set("scm:git:git://github.com/kingsword09/SymbolCraft.git")
-            developerConnection.set("scm:git:ssh://git@github.com/kingsword09/SymbolCraft.git")
+            url.set("https://github.com/archivesteak/SymbolCraft")
+            connection.set("scm:git:git://github.com/archivesteak/SymbolCraft.git")
+            developerConnection.set("scm:git:ssh://git@github.com/archivesteak/SymbolCraft.git")
         }
     }
 }
@@ -117,7 +117,7 @@ publishing {
             val repository =
                 (project.findProperty("gpr.repository") as String?)
                     ?: System.getenv("GITHUB_REPOSITORY")
-                    ?: "kingsword09/SymbolCraft"
+                    ?: "archivesteak/SymbolCraft"
             url = uri("https://maven.pkg.github.com/$repository")
             credentials {
                 username =
@@ -204,7 +204,7 @@ tasks.jar {
         attributes(
             "Implementation-Title" to project.name,
             "Implementation-Version" to project.version,
-            "Implementation-Vendor" to "kingsword09",
+            "Implementation-Vendor" to "archivesteak",
             "Built-By" to System.getProperty("user.name"),
             "Built-JDK" to System.getProperty("java.version"),
             "Built-Gradle" to gradle.gradleVersion,

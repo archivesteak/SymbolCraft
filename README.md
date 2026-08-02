@@ -1,6 +1,6 @@
 # SymbolCraft 🎨
 
-![Maven Central Version](https://img.shields.io/maven-central/v/io.github.kingsword09/symbolcraft)
+![GitHub Release](https://img.shields.io/github/v/release/archivesteak/SymbolCraft)
 
 A powerful Gradle plugin for generating icons on-demand from multiple icon libraries (Material Symbols, Bootstrap Icons, Heroicons, etc.) in Kotlin Multiplatform projects, featuring intelligent caching, deterministic builds, and high-performance parallel generation.
 
@@ -24,33 +24,17 @@ A powerful Gradle plugin for generating icons on-demand from multiple icon libra
 
 ## 📦 Installation
 
-### 1. Add plugin to your project
+SymbolCraft is published to **GitHub Packages** (not Maven Central / Gradle Plugin Portal).
 
-In your `libs.versions.toml` file:
+### 1. Add the GitHub Packages repository
 
-```toml
-[plugins]
-symbolCraft = { id = "io.github.kingsword09.symbolcraft", version = "x.x.x" }
-```
-
-In your `build.gradle.kts` file:
-
-```kotlin
-plugins {
-    alias(libs.plugins.symbolCraft)
-}
-```
-
-<details>
-<summary><strong>Alternative: install from GitHub Packages</strong> (e.g. a fork not on Maven Central / Plugin Portal)</summary>
-
-In `settings.gradle.kts`:
+In your `settings.gradle.kts` file:
 
 ```kotlin
 pluginManagement {
     repositories {
         maven {
-            url = uri("https://maven.pkg.github.com/OWNER/REPO")
+            url = uri("https://maven.pkg.github.com/archivesteak/SymbolCraft")
             credentials {
                 username = providers.gradleProperty("gpr.user").orNull
                 password = providers.gradleProperty("gpr.key").orNull
@@ -66,9 +50,24 @@ Note: GitHub Packages requires authentication even for public packages — consu
 `~/.gradle/gradle.properties`. Transitive dependencies (e.g. `svg-to-compose`) still resolve from
 `mavenCentral()`, so keep it in your dependency repositories.
 
-</details>
+### 2. Add the plugin to your project
 
-### 2. Configure the plugin
+In your `libs.versions.toml` file:
+
+```toml
+[plugins]
+symbolCraft = { id = "io.github.archivesteak.symbolcraft", version = "x.x.x" }
+```
+
+In your `build.gradle.kts` file:
+
+```kotlin
+plugins {
+    alias(libs.plugins.symbolCraft)
+}
+```
+
+### 3. Configure the plugin
 
 ```kotlin
 symbolCraft {
@@ -999,7 +998,7 @@ kotlin {
 }
 
 symbolCraft {
-    packageName.set("io.github.kingsword09.example")
+    packageName.set("io.github.archivesteak.example")
     outputDirectory.set("src/commonMain/generated/symbols")
     generatePreview.set(true)
 
@@ -1062,7 +1061,7 @@ Issues and Pull Requests are welcome!
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/kingsword09/SymbolCraft.git
+git clone https://github.com/archivesteak/SymbolCraft.git
 cd SymbolCraft
 ```
 

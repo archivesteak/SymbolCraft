@@ -54,7 +54,7 @@ kotlin {
 symbolCraft {
     // Output directory for generated icons
     outputDirectory.set("src/commonMain/generated/symbols")
-    packageName.set("io.github.kingsword09.example")
+    packageName.set("io.github.archivesteak.example")
     generatePreview.set(true)
 
     // Icon naming configuration
@@ -220,13 +220,13 @@ Generated icons can be used in Compose like this:
 ```kotlin
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
-import io.github.kingsword09.example.icons.materialsymbols.Icons as MaterialSymbols
-import io.github.kingsword09.example.icons.materialsymbols.icons.HomeW400OutlinedFill
-import io.github.kingsword09.example.icons.materialsymbols.icons.SearchW400Outlined
-import io.github.kingsword09.example.icons.mdi.Icons as MdiIcons
-import io.github.kingsword09.example.icons.mdi.icons.AbacusMdi
-import io.github.kingsword09.example.icons.official.Icons as OfficialIcons
-import io.github.kingsword09.example.icons.official.icons.HomeFill
+import io.github.archivesteak.example.icons.materialsymbols.Icons as MaterialSymbols
+import io.github.archivesteak.example.icons.materialsymbols.icons.HomeW400OutlinedFill
+import io.github.archivesteak.example.icons.materialsymbols.icons.SearchW400Outlined
+import io.github.archivesteak.example.icons.mdi.Icons as MdiIcons
+import io.github.archivesteak.example.icons.mdi.icons.AbacusMdi
+import io.github.archivesteak.example.icons.official.Icons as OfficialIcons
+import io.github.archivesteak.example.icons.official.icons.HomeFill
 
 @Composable
 fun MyScreen() {

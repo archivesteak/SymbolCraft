@@ -1,4 +1,4 @@
-import io.github.kingsword09.symbolcraft.model.*
+import io.github.archivesteak.symbolcraft.model.*
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
@@ -61,11 +61,11 @@ kotlin {
 }
 
 android {
-    namespace = "io.github.kingsword09.example"
+    namespace = "io.github.archivesteak.example"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
-        applicationId = "io.github.kingsword09.example"
+        applicationId = "io.github.archivesteak.example"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
@@ -90,7 +90,7 @@ android {
 symbolCraft {
     // Output directory for generated icons
     outputDirectory.set("src/commonMain/generated/symbols")
-    packageName.set("io.github.kingsword09.example")
+    packageName.set("io.github.archivesteak.example")
 
     // Enable preview generation (optional)
     generatePreview.set(true)
@@ -155,11 +155,11 @@ symbolCraft {
 
 compose.desktop {
     application {
-        mainClass = "io.github.kingsword09.example.MainKt"
+        mainClass = "io.github.archivesteak.example.MainKt"
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "io.github.kingsword09.example"
+            packageName = "io.github.archivesteak.example"
             packageVersion = "1.0.0"
         }
     }

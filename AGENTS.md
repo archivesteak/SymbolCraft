@@ -5,10 +5,10 @@
 **SymbolCraft** is a Gradle plugin for Kotlin Multiplatform projects that generates icons on-demand from multiple icon libraries (Material Symbols, Bootstrap Icons, Heroicons, etc.).
 
 - **Version**: v0.6.0
-- **Status**: ✅ Published to the Gradle Plugin Portal and Maven Central
+- **Status**: ✅ Published to GitHub Packages (fork of [kingsword09/SymbolCraft](https://github.com/kingsword09/SymbolCraft), not on Maven Central / Plugin Portal)
 - **Language**: Kotlin 2.0.0
 - **Minimum Gradle version**: 8.0+
-- **Repository**: https://github.com/kingsword09/SymbolCraft
+- **Repository**: https://github.com/archivesteak/SymbolCraft
 
 ### Core Features
 
@@ -31,7 +31,7 @@
 | Kotlin Coroutines | 1.8.1 | Parallel downloads |
 | Ktor Client | 2.3.12 | HTTP client |
 | Kotlinx Serialization | - | JSON serialization |
-| svg-to-compose | 0.1.0 | SVG conversion library (io.github.kingsword09 fork) |
+| svg-to-compose | 0.1.0 | SVG conversion library (io.github.kingsword09 fork of DevSrSouza/svg-to-compose) |
 
 ---
 
@@ -44,7 +44,7 @@ SymbolCraft/
 ├── settings.gradle.kts                 # Gradle settings
 ├── libs.versions.toml                  # Version catalog
 │
-├── src/main/kotlin/io/github/kingsword09/symbolcraft/
+├── src/main/kotlin/io/github/archivesteak/symbolcraft/
 │   ├── plugin/                         # Gradle plugin core
 │   │   ├── SymbolCraftPlugin.kt        # Plugin entry point, task registration
 │   │   ├── SymbolCraftExtension.kt     # DSL configuration interface
@@ -94,7 +94,7 @@ SymbolCraft/
 ## Core Components
 
 ### 1. **SymbolCraftPlugin** (plugin entry point)
-**Location**: `src/main/kotlin/io/github/kingsword09/symbolcraft/plugin/SymbolCraftPlugin.kt`
+**Location**: `src/main/kotlin/io/github/archivesteak/symbolcraft/plugin/SymbolCraftPlugin.kt`
 
 **Responsibilities**:
 - Registers the `symbolCraft` DSL extension
@@ -333,7 +333,7 @@ abstract class IconNameTransformer {
 1. **Modify plugin code**
    ```bash
    # Edit source files under src/main/kotlin/
-   vim src/main/kotlin/io/github/kingsword09/symbolcraft/tasks/GenerateSymbolsTask.kt
+   vim src/main/kotlin/io/github/archivesteak/symbolcraft/tasks/GenerateSymbolsTask.kt
    ```
 
 2. **Publish to local Maven**
@@ -375,7 +375,7 @@ abstract class IconNameTransformer {
 ./gradlew publishAllPublicationsToGitHubPackagesRepository \
   -Pgpr.user=GITHUB_USERNAME \
   -Pgpr.key=GITHUB_PAT \
-  -Pgpr.repository=owner/repo   # Optional; defaults to the GITHUB_REPOSITORY env var or kingsword09/SymbolCraft
+  -Pgpr.repository=owner/repo   # Optional; defaults to the GITHUB_REPOSITORY env var or archivesteak/SymbolCraft
 ```
 
 - In CI, the `publish-github-packages` job in `.github/workflows/ci.yml` publishes automatically (uses the built-in `GITHUB_TOKEN` with `packages: write` permission).
@@ -642,7 +642,7 @@ docs(readme): update installation guide
 
 3. Configure the upstream remote:
    ```bash
-   git remote add upstream https://github.com/kingsword09/SymbolCraft.git
+   git remote add upstream https://github.com/archivesteak/SymbolCraft.git
    ```
 
 ### Development flow
@@ -684,9 +684,9 @@ docs(readme): update installation guide
 ## Resources
 
 ### Official resources
-- **GitHub repository**: https://github.com/kingsword09/SymbolCraft
-- **Gradle Plugin Portal**: https://plugins.gradle.org/plugin/io.github.kingsword09.symbolcraft
-- **Maven Central**: https://central.sonatype.com/artifact/io.github.kingsword09/symbolcraft
+- **GitHub repository**: https://github.com/archivesteak/SymbolCraft
+- **GitHub Packages**: https://github.com/archivesteak/SymbolCraft/packages
+- **Upstream (original)**: https://github.com/kingsword09/SymbolCraft
 
 ### Related tools
 - **Material Symbols browser**: https://marella.github.io/material-symbols/demo/
@@ -701,9 +701,9 @@ docs(readme): update installation guide
 
 ## Contact
 
-- **Maintainer**: [@kingsword09](https://github.com/kingsword09)
-- **Email**: kingsword09@gmail.com
-- **Issue tracker**: [GitHub Issues](https://github.com/kingsword09/SymbolCraft/issues)
+- **Maintainer**: [@archivesteak](https://github.com/archivesteak)
+- **Email**: archivesteak@gmail.com
+- **Issue tracker**: [GitHub Issues](https://github.com/archivesteak/SymbolCraft/issues)
 
 ---
 
