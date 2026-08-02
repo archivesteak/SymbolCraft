@@ -116,10 +116,10 @@ jobs:
     - name: Verify plugin publication
       run: |
         if [ -d ~/.m2/repository/io/github/archivesteak ]; then
-          echo "✅ Plugin published to local Maven repository"
+          echo "Plugin published to local Maven repository"
           find ~/.m2/repository/io/github/archivesteak -name "*.jar" | head -5
         else
-          echo "❌ Plugin not found in local Maven repository"
+          echo "Plugin not found in local Maven repository"
           exit 1
         fi
 
@@ -167,7 +167,7 @@ jobs:
       run: |
         VERSION=${{ steps.extract_version.outputs.version }}
         if ! grep -q "version = \"$VERSION\"" build.gradle.kts; then
-          echo "❌ Commit message says v$VERSION but build.gradle.kts has a different version."
+          echo "Commit message says v$VERSION but build.gradle.kts has a different version."
           echo "Bump version in build.gradle.kts before making the release commit."
           exit 1
         fi
@@ -192,7 +192,7 @@ jobs:
 
           Generate icons on-demand from multiple libraries (Material Symbols, Bootstrap Icons, etc.) for Compose Multiplatform with smart caching.
 
-          ### 📦 Installation (GitHub Packages)
+          ### Installation (GitHub Packages)
           ```kotlin
           // settings.gradle.kts
           pluginManagement {
@@ -215,7 +215,7 @@ jobs:
           GitHub Packages requires authentication even for public packages: set `gpr.user` and
           `gpr.key` (a PAT with `read:packages`) in `~/.gradle/gradle.properties`.
 
-          ### 🔗 Links
+          ### Links
           - [GitHub Packages](https://github.com/archivesteak/SymbolCraft/packages)
           - [Documentation](https://github.com/archivesteak/SymbolCraft#readme)
         files: |
@@ -364,13 +364,13 @@ jobs:
     - name: Notify success
       if: needs.publish-github-packages.result == 'success'
       run: |
-        echo "🎉 SymbolCraft release completed successfully!"
-        echo "✅ Plugin published to GitHub Packages"
-        echo "🔗 https://github.com/archivesteak/SymbolCraft/packages"
+        echo "SymbolCraft release completed successfully."
+        echo "Plugin published to GitHub Packages"
+        echo "https://github.com/archivesteak/SymbolCraft/packages"
 
     - name: Notify failure
       if: needs.publish-github-packages.result != 'success'
       run: |
-        echo "❌ SymbolCraft release failed!"
+        echo "SymbolCraft release failed!"
         echo "GitHub Packages: ${{ needs.publish-github-packages.result }}"
-        echo "🔍 Check the publish-github-packages logs for details"
+        echo "Check the publish-github-packages logs for details"

@@ -53,7 +53,7 @@ internal class DownloadCoordinator(
     fun logCacheStatistics(downloader: SvgDownloader) {
         val cacheStats = downloader.getCacheStats()
         logger.lifecycle(
-            "📦 SVG Cache: ${cacheStats.fileCount} files, ${
+            "SVG Cache: ${cacheStats.fileCount} files, ${
                 String.format(
                     "%.2f",
                     cacheStats.totalSizeMB,
@@ -97,10 +97,10 @@ internal class DownloadCoordinator(
         val localProcessed = AtomicInteger(0)
 
         if (remoteIconCount > 0) {
-            logger.lifecycle("⬇️ Downloading SVG files...")
+            logger.lifecycle("Downloading SVG files...")
         }
         if (localIconCount > 0) {
-            logger.lifecycle("📂 Processing local SVG files...")
+            logger.lifecycle("Processing local SVG files...")
         }
 
         val downloadJobs =
@@ -108,32 +108,26 @@ internal class DownloadCoordinator(
                 iconConfigs.map { iconConfig ->
                     async(dispatcher) {
                         when (iconConfig) {
-                            is LocalIconConfig -> {
-                                val result =
-                                    processLocalSvg(
-                                        iconName = iconName,
-                                        iconConfig = iconConfig,
-                                        tempDir = tempDir,
-                                        completed = localProcessed,
-                                        failed = failed,
-                                        totalCount = localIconCount,
-                                    )
-                                result
-                            }
-                            else -> {
-                                val result =
-                                    processRemoteSvg(
-                                        iconName = iconName,
-                                        iconConfig = iconConfig,
-                                        downloader = downloader,
-                                        tempDir = tempDir,
-                                        completed = completed,
-                                        failed = failed,
-                                        cached = cached,
-                                        totalCount = remoteIconCount,
-                                    )
-                                result
-                            }
+                            is LocalIconConfig ->
+                                processLocalSvg(
+                                    iconName = iconName,
+                                    iconConfig = iconConfig,
+                                    tempDir = tempDir,
+                                    completed = localProcessed,
+                                    failed = failed,
+                                    totalCount = localIconCount,
+                                )
+                            else ->
+                                processRemoteSvg(
+                                    iconName = iconName,
+                                    iconConfig = iconConfig,
+                                    downloader = downloader,
+                                    tempDir = tempDir,
+                                    completed = completed,
+                                    failed = failed,
+                                    cached = cached,
+                                    totalCount = remoteIconCount,
+                                )
                         }
                     }
                 }
@@ -167,7 +161,7 @@ internal class DownloadCoordinator(
             if (!sourceFile.exists() || !sourceFile.isFile) {
                 failed.incrementAndGet()
                 val message = "Local SVG not found at ${sourceFile.absolutePath}"
-                logger.warn("   ⚠️ Failed to load local icon $iconName: $message")
+                logger.warn("   Failed to load local icon $iconName: $message")
                 DownloadResult.Failed(iconName, iconConfig, message)
             } else {
                 val librarySubdir = File(tempDir, iconConfig.libraryId)
@@ -184,7 +178,7 @@ internal class DownloadCoordinator(
         } catch (e: Exception) {
             failed.incrementAndGet()
             val message = e.message ?: "Unknown error"
-            logger.warn("   ❌ Error processing local icon $iconName: $message")
+            logger.warn("   Error processing local icon $iconName: $message")
             DownloadResult.Failed(iconName, iconConfig, message)
         }
     }
@@ -211,7 +205,7 @@ internal class DownloadCoordinator(
 
             val svgContent = downloader.downloadSvg(iconName, iconConfig)
 
-            if (svgContent != null && svgContent.isNotBlank()) {
+            if (!svgContent.isNullOrBlank()) {
                 val librarySubdir = File(tempDir, iconConfig.libraryId)
                 librarySubdir.mkdirs()
 
@@ -221,7 +215,7 @@ internal class DownloadCoordinator(
 
                 val progress = completed.incrementAndGet()
                 if (wasCached) cached.incrementAndGet()
-                maybeLogProgress("   Download progress", progress, totalCount)
+                maybeLogProgress("Download progress", progress, totalCount)
 
                 DownloadResult.Success(iconName, iconConfig, fileName)
             } else {
@@ -229,7 +223,7 @@ internal class DownloadCoordinator(
                 val errorMsg =
                     if (svgContent == null) "Download returned null" else "Empty SVG content"
                 logger.warn(
-                    "   ⚠️ Failed to download: $iconName-${iconConfig.getSignature()} ($errorMsg)"
+                    "   Failed to download: $iconName-${iconConfig.getSignature()} ($errorMsg)"
                 )
                 DownloadResult.Failed(iconName, iconConfig, errorMsg)
             }
@@ -245,7 +239,7 @@ internal class DownloadCoordinator(
                     else -> e.message ?: "Unknown error"
                 }
             logger.warn(
-                "   ❌ Error downloading $iconName-${iconConfig.getSignature()}: $detailedError"
+                "   Error downloading $iconName-${iconConfig.getSignature()}: $detailedError"
             )
             DownloadResult.Failed(iconName, iconConfig, detailedError)
         }
@@ -279,18 +273,18 @@ internal class DownloadCoordinator(
 
     /** Writes a user-friendly progress summary once all parallel jobs complete. */
     private fun logDownloadStats(stats: DownloadStats) {
-        logger.lifecycle("✅ Processing completed:")
-        logger.lifecycle("   📁 Total: ${stats.totalCount}")
-        logger.lifecycle("   ✅ Success: ${stats.successCount}")
-        logger.lifecycle("   ❌ Failed: ${stats.failedCount}")
+        logger.lifecycle("Processing completed:")
+        logger.lifecycle("   Total: ${stats.totalCount}")
+        logger.lifecycle("   Success: ${stats.successCount}")
+        logger.lifecycle("   Failed: ${stats.failedCount}")
 
         if (stats.cachedCount > 0) {
-            logger.lifecycle("   💾 From cache: ${stats.cachedCount} (remote icons only)")
+            logger.lifecycle("   From cache: ${stats.cachedCount} (remote icons only)")
         }
 
         if (stats.failedCount > 0) {
             logger.warn(
-                "⚠️ Some icons failed to process. Generated code may use fallback implementations."
+                "Some icons failed to process. Generated code may use fallback implementations."
             )
         }
     }
@@ -298,8 +292,7 @@ internal class DownloadCoordinator(
     private fun maybeLogProgress(prefix: String, current: Int, total: Int) {
         if (total <= 0) return
         if (current == total || current % PROGRESS_STEP == 0) {
-            val normalizedPrefix = if (prefix.startsWith("   ")) prefix else "   $prefix"
-            logger.lifecycle("$normalizedPrefix: $current/$total")
+            logger.lifecycle("   $prefix: $current/$total")
         }
     }
 

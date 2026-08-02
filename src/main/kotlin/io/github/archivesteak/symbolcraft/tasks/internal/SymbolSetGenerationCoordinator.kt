@@ -19,14 +19,14 @@ internal class SymbolSetGenerationCoordinator(private val logger: Logger) {
      * `Symbols.swift` helper when enabled.
      *
      * @param context shared generation context holding output directories and DSL configuration
-     * @param iconsByLibrary mapping of library identifier → icon names
+     * @param iconsByLibrary mapping of library identifier -> icon names
      */
     fun generate(context: GenerationContext, iconsByLibrary: Map<String, Set<String>>) {
         val ext = context.extension
         val swiftUI = ext.swiftUIConfig
         val outputDir = context.swiftUIOutputDir ?: return
 
-        logger.lifecycle("🍏 Generating SwiftUI .symbolset bundles...")
+        logger.lifecycle("Generating SwiftUI .symbolset bundles...")
 
         val generator = SymbolSetGenerator { message -> logger.lifecycle(message) }
 
@@ -49,7 +49,7 @@ internal class SymbolSetGenerationCoordinator(private val logger: Logger) {
         iconsByLibrary.keys.forEach { libraryId ->
             val libraryTempDir = context.tempDir.resolve(libraryId)
             if (!libraryTempDir.exists() || libraryTempDir.listFiles()?.isEmpty() != false) {
-                logger.warn("⚠️ No SVG files found for library: $libraryId (SwiftUI)")
+                logger.warn("No SVG files found for library: $libraryId (SwiftUI)")
                 return@forEach
             }
 
@@ -73,9 +73,14 @@ internal class SymbolSetGenerationCoordinator(private val logger: Logger) {
                 allSymbolSetNames += results.map { it.symbolSetName }
                 totalGenerated += results.size
             } catch (e: Exception) {
-                logger.error("❌ .symbolset generation failed for library $libraryId: ${e.message}")
+                // Rethrow after logging: continuing would produce partial SwiftUI output while
+                // the task (and the Gradle build cache) records success.
+                logger.error(".symbolset generation failed for library $libraryId: ${e.message}")
                 logger.error("   Stack trace: ${e.stackTraceToString()}")
-                logger.error("   💡 Check that the downloaded SVGs are path-based and well-formed")
+                logger.error(
+                    "   Hint: check that the downloaded SVGs are path-based and well-formed"
+                )
+                throw e
             }
         }
 
@@ -85,12 +90,11 @@ internal class SymbolSetGenerationCoordinator(private val logger: Logger) {
                     ?: resolveSwiftSourceDir(
                         configured = swiftUI.swiftSourceOutputDirectory.orNull,
                         outputDir = outputDir,
-                        projectDir =
-                            ext.projectDirectory.orNull?.takeIf { it.isNotBlank() }?.let(::File),
+                        projectDir = ext.projectDir,
                     )
             if (swiftSourceDir != outputDir) {
                 logger.lifecycle(
-                    "   📁 outputDirectory is inside an Xcode asset catalog; writing " +
+                    "   outputDirectory is inside an Xcode asset catalog; writing " +
                         "Symbols.swift to ${swiftSourceDir.absolutePath}"
                 )
             }
@@ -99,10 +103,10 @@ internal class SymbolSetGenerationCoordinator(private val logger: Logger) {
                 swiftSourceDir,
                 swiftUI.scaleFactor.get(),
             )
-            logger.lifecycle("   📝 Generated Symbols.swift (${allSymbolSetNames.size} symbols)")
+            logger.lifecycle("   Generated Symbols.swift (${allSymbolSetNames.size} symbols)")
         }
 
-        logger.lifecycle("✅ Successfully generated $totalGenerated .symbolset bundles")
+        logger.lifecycle("Successfully generated $totalGenerated .symbolset bundles")
     }
 
     companion object {

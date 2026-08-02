@@ -4,21 +4,21 @@
 
 **SymbolCraft** is a Gradle plugin for Kotlin Multiplatform projects that generates icons on-demand from multiple icon libraries (Material Symbols, Bootstrap Icons, Heroicons, etc.).
 
-- **Version**: v0.6.3
-- **Status**: ✅ Published to GitHub Packages (fork of [kingsword09/SymbolCraft](https://github.com/kingsword09/SymbolCraft), not on Maven Central / Plugin Portal)
+- **Version**: v0.6.4
+- **Status**: Published to GitHub Packages (fork of [kingsword09/SymbolCraft](https://github.com/kingsword09/SymbolCraft), not on Maven Central / Plugin Portal)
 - **Language**: Kotlin 2.0.0
 - **Minimum Gradle version**: 8.0+
 - **Repository**: https://github.com/archivesteak/SymbolCraft
 
 ### Core Features
 
-- 🚀 **Multiple icon libraries** - Material Symbols, Bootstrap Icons, Heroicons, custom URL templates
-- 🍏 **SwiftUI output** - Generate custom SF Symbol `.symbolset` bundles from the same SVGs (real per-weight glyphs mapped to SF weight columns)
-- 💾 **Smart caching** - 7-day SVG cache, supports relative/absolute paths
-- ⚡ **Parallel downloads** - Kotlin coroutines with configurable retry mechanism
-- 🎯 **Deterministic builds** - Git-friendly deterministic code generation
-- 🏷️ **Flexible naming** - Multiple naming conventions (PascalCase, camelCase, snake_case, etc.)
-- 👀 **Compose Previews** - Auto-generate @Preview functions
+- **Multiple icon libraries** - Material Symbols, Bootstrap Icons, Heroicons, custom URL templates
+- **SwiftUI output** - Generate custom SF Symbol `.symbolset` bundles from the same SVGs (real per-weight glyphs mapped to SF weight columns)
+- **Smart caching** - 7-day SVG cache, supports relative/absolute paths
+- **Parallel downloads** - Kotlin coroutines with configurable retry mechanism
+- **Deterministic builds** - Git-friendly deterministic code generation
+- **Flexible naming** - Multiple naming conventions (PascalCase, camelCase, snake_case, etc.)
+- **Compose Previews** - Auto-generate @Preview functions
 
 ---
 
@@ -67,7 +67,7 @@ SymbolCraft/
 │   │       ├── DownloadCoordinator.kt       # Parallel SVG download orchestration
 │   │       ├── DownloadModels.kt            # Download telemetry models
 │   │       ├── IconLibraryClassifier.kt     # Groups configs by library id
-│   │       ├── SvgConversionCoordinator.kt  # SVG → Compose conversion orchestration
+│   │       ├── SvgConversionCoordinator.kt  # SVG -> Compose conversion orchestration
 │   │       └── SymbolSetGenerationCoordinator.kt # .symbolset + Symbols.swift orchestration
 │   │
 │   ├── download/                       # Download module
@@ -124,8 +124,9 @@ SymbolCraft/
   generation task. This covers AGP built-in Kotlin / KMP compile tasks like `compileAndroidMain`
   whose names contain no "Kotlin" — name matching alone missed them. The task type is loaded
   reflectively (`Class.forName`) because kotlin-gradle-plugin is `compileOnly` and a static
-  reference breaks plugin application/class decoration in non-Kotlin projects. A name-based
-  fallback (`compile*Kotlin*`, metadata, `merge*Assets`, `process*Resources`) remains as backup.
+  reference breaks plugin application/class decoration in non-Kotlin projects. A lazy name-based
+  fallback (`compile*Kotlin*`) remains as backup; generated icons are Kotlin sources, so no
+  asset/resource task wiring is needed (or wanted).
 
 **Key code**:
 ```kotlin
@@ -209,8 +210,8 @@ abstract class SymbolCraftExtension {
 
 **Key flow**:
 ```
-Parse config → Clean old files → Parallel SVG download → Naming transform →
-Convert to Compose → Generate .symbolset (optional) → Clean unused cache → Statistics
+Parse config -> Clean old files -> Parallel SVG download -> Naming transform ->
+Convert to Compose -> Generate .symbolset (optional) -> Clean unused cache -> Statistics
 ```
 
 ---
@@ -340,7 +341,7 @@ abstract class IconNameTransformer {
 - Reference implementations: `EvanBacon/create-symbol` (template v2.0, 27 variants, guide constants, 1.7× optical scaling, 4.5 margin padding); Cookpad's converter script
 - Reference material is cloned into `reference/` (gitignored): swiftdraw, create-symbol, rime (a real Template v.5.0 export), upstream (the upstream repository)
 
-**Weight mapping**: Material weight → SF weight column: W100→Ultralight … W700→Bold. Symbol sets are grouped by (iconName, variant, fill); every symbol set always contains the full 27-variant grid — configured weights use genuine glyph outlines, the rest are derived from the nearest weight via `WEIGHT_SCALES` relative sizing, and S/L scales follow the cap-height ratio. External/local icons produce Regular-only symbol sets.
+**Weight mapping**: Material weight -> SF weight column: W100->Ultralight … W700->Bold. Symbol sets are grouped by (iconName, variant, fill); every symbol set always contains the full 27-variant grid — configured weights use genuine glyph outlines, the rest are derived from the nearest weight via `WEIGHT_SCALES` relative sizing, and S/L scales follow the cap-height ratio. External/local icons produce Regular-only symbol sets.
 
 **Output**:
 - Geometry: baseScale = (CapHeightM / viewBox height) × 1.7 × scaleFactor; glyphs vertically centered between Capline-M and Baseline-M, laid out horizontally by weight column (center 1650, spacing 296.71); `left-margin`/`right-margin` adjusted to Regular column width ±4.5
@@ -393,7 +394,7 @@ abstract class IconNameTransformer {
 ./gradlew publishPlugins           # Requires API key configuration
 ```
 
-> ⚠️ **Dormant on this fork** — the plugin is not on the Portal and no `GRADLE_PUBLISH_*` secrets
+> **Dormant on this fork** — the plugin is not on the Portal and no `GRADLE_PUBLISH_*` secrets
 > exist. The CI job is gated behind the `ENABLE_GRADLE_PORTAL` repository variable; set it to
 > `true` (and add the secrets) to activate.
 
@@ -407,14 +408,14 @@ abstract class IconNameTransformer {
 ```
 
 - In CI, the `publish-github-packages` job in `.github/workflows/ci.yml` publishes automatically (uses the built-in `GITHUB_TOKEN` with `packages: write` permission).
-- ⚠️ Consumers need a token with `read:packages` even to read public packages (a GitHub Packages limitation).
+- Note: consumers need a token with `read:packages` even to read public packages (a GitHub Packages limitation).
 
 ### 3. Publish to Maven Central
 ```bash
 ./gradlew publishToMavenCentral    # Requires signing configuration
 ```
 
-> ⚠️ **Dormant on this fork** — the plugin is not on Maven Central and no OSSRH/signing secrets
+> **Dormant on this fork** — the plugin is not on Maven Central and no OSSRH/signing secrets
 > exist. The CI job is gated behind the `ENABLE_MAVEN_CENTRAL` repository variable; set it to
 > `true` (and add the secrets) to activate.
 
@@ -450,42 +451,47 @@ abstract class IconNameTransformer {
 
 **Relative paths (default)**:
 ```kotlin
-cacheDirectory.set("symbolcraft-cache")  // → build/symbolcraft-cache/
+cacheDirectory.set("symbolcraft-cache")  // -> build/symbolcraft-cache/
 ```
-- ✅ Automatically cleans unused cache
-- ✅ Project isolation
-- ✅ `./gradlew clean` removes it automatically
+- Automatically cleans unused cache
+- Project isolation
+- `./gradlew clean` removes it automatically
 
 **Absolute paths (shared cache)**:
 ```kotlin
 // Unix/Linux/macOS
-cacheDirectory.set("/var/tmp/symbolcraft")  // → /var/tmp/symbolcraft/
+cacheDirectory.set("/var/tmp/symbolcraft")  // -> /var/tmp/symbolcraft/
 // Windows
 cacheDirectory.set("""C:\Temp\SymbolCraft""")
 ```
-- ✅ Shared across projects
-- ⚠️ Automatic cleanup skipped (to avoid conflicts)
+- Shared across projects
+- Automatic cleanup skipped (to avoid conflicts)
 
 ---
 
 ## Testing Status
 
 ### Current state
-- ✅ `IconNameTransformerTest` - Naming transformation
-- ✅ `MaterialSymbolsConfigTest` - Material Symbols configuration model
-- ✅ `LocalIconsBuilderTest` - Local SVG discovery (⚠️ currently failing on Windows due to glob handling - pre-existing upstream issue)
-- ✅ `GenerateSymbolsTaskTest` - TestKit integration tests (⚠️ same pre-existing local-icons issue)
-- ✅ `SymbolSetGeneratorTest` - `.symbolset` generation (30 cases: template structure, guide constants, geometry centering, weight mapping, determinism, name sanitization, Swift enum emission, fill-rule preservation, scaleFactor validation, duplicate-name handling)
-- ✅ `SwiftUISourceDirResolutionTest` - `Symbols.swift` placement rules (8 cases: plain folder, `.xcassets` root/child/uppercase/exact-name redirect, relative/absolute override, blank fallback)
+- `IconNameTransformerTest` - Naming transformation
+- `MaterialSymbolsConfigTest` - Material Symbols configuration model
+- `LocalIconsBuilderTest` - Local SVG discovery
+- `GenerateSymbolsTaskTest` - TestKit integration tests
+- `SymbolSetGeneratorTest` - `.symbolset` generation (30 cases: template structure, guide constants, geometry centering, weight mapping, determinism, name sanitization, Swift enum emission, fill-rule preservation, scaleFactor validation, duplicate-name handling)
+- `SwiftUISourceDirResolutionTest` - `Symbols.swift` placement rules (8 cases: plain folder, `.xcassets` root/child/uppercase/exact-name redirect, relative/absolute override, blank fallback)
+
+All suites are green on Windows and Linux (80 tests). The local-icons glob bug that made
+`LocalIconsBuilderTest`/`GenerateSymbolsTaskTest` fail on Windows was fixed in v0.6.4 — Java glob
+patterns use `/` on every platform, and converting to `File.separator` turned the separator into a
+glob escape character on Windows.
 
 ---
 
 ## TODOs and Improvement Directions
 
-### 🔴 High priority
+### High priority
 
 1. **Improve error handling**
-   - ✅ Done: Configurable retry mechanism (maxRetries, retryDelayMs)
+   - [x] Done: Configurable retry mechanism (maxRetries, retryDelayMs)
    - [ ] More detailed, categorized error messages
    - [ ] Upfront configuration validation (avoid runtime errors)
 
@@ -494,28 +500,28 @@ cacheDirectory.set("""C:\Temp\SymbolCraft""")
    - [ ] Download speed statistics
    - [ ] Cache hit-rate reports
 
-### 🟡 Medium priority
+### Medium priority
 
 3. **Feature enhancements**
-   - ✅ Done: Multi-library support (Material Symbols + external libraries)
-   - ✅ Done: Flexible naming configuration (NamingConfig)
-   - ✅ Done: SwiftUI output (custom SF Symbols `.symbolset`)
+   - [x] Done: Multi-library support (Material Symbols + external libraries)
+   - [x] Done: Flexible naming configuration (NamingConfig)
+   - [x] Done: SwiftUI output (custom SF Symbols `.symbolset`)
    - [ ] Icon search (CLI)
    - [ ] Icon usage analysis reports
 
 4. **Developer experience**
-   - ✅ Done: Dokka V2 documentation configuration
+   - [x] Done: Dokka V2 documentation configuration
    - [ ] More KDoc comments
    - [ ] Video tutorials / GIF demos
    - [ ] Project templates
 
 5. **Example extensions**
-   - ✅ Done: Compose Multiplatform example (Android + iOS + Desktop)
-   - ✅ Done: Example `.symbolset` generation into `example/iosApp/GeneratedSymbols`
+   - [x] Done: Compose Multiplatform example (Android + iOS + Desktop)
+   - [x] Done: Example `.symbolset` generation into `example/iosApp/GeneratedSymbols`
    - [ ] Pure Android example
    - [ ] Best-practices guide
 
-### 🟢 Low priority
+### Low priority
 
 6. **Ecosystem tools**
    - [ ] IntelliJ IDEA plugin (visual configuration)
@@ -742,80 +748,90 @@ docs(readme): update installation guide
 
 ## Changelog
 
-### v0.6.3 (latest)
-- 🛠️ **Gradle output contract fixed**: `Symbols.swift`'s write location is now a declared `@Optional @OutputDirectory` on `GenerateSymbolsTask` (`swiftUISourceDir`), resolved via lazy providers at configuration time — no more `afterEvaluate`, no undeclared outputs, correct up-to-date/build-cache behavior. `GenerationContext` carries both SwiftUI directories as the single source of truth.
-- 🧭 **`.xcassets` detection generalized**: the redirect now matches a catalog anywhere in the output path (case-insensitive), so a dedicated child like `Assets.xcassets/SymbolCraft` (recommended — keeps the task output from overlapping your hand-managed assets) also redirects `Symbols.swift` to the catalog parent.
-- 🧹 **Stale-file hygiene**: the pre-generation cleaner and `cleanSymbolCraftIcons` now remove generated `Symbols.swift` from the source location too (output dir, catalog parent, custom dir), guarded by the `// Generated by SymbolCraft` header check so user files are never deleted; `cleanSymbolCraftIcons` also removes `.symbolset` bundles.
-- 🎨 **SVG fidelity**: `fill-rule`/`clip-rule` attributes are preserved through `.symbolset` generation (Bootstrap Icons/Heroicons holes render correctly); single-quoted SVG attributes accepted; a warning is logged when a `<path>` carries an ignored `transform`.
-- 🛡️ **Fail-fast validation**: non-positive/non-finite `scaleFactor` rejected; duplicate symbol set names after sanitization fail with an actionable message; `generateSwiftEnumFile` creates missing output directories and dedupes Swift case names that collide with each other or with reserved members (`pointScale`, `allCases`, `image`, `rawValue`).
-- 🔌 **Compile wiring widened**: added `org.jetbrains.kotlin.js`, `com.android.dynamic-feature`, `com.android.test` to the type-based `KotlinCompileTool` wiring; a diagnostic is logged if the reflective lookup ever fails.
-- ⚙️ **CI/release hardening**: `notify` now tracks the GitHub Packages job; Portal/Maven Central jobs are dormant behind `ENABLE_GRADLE_PORTAL`/`ENABLE_MAVEN_CENTRAL` repo variables; release job fails fast when the commit-message version doesn't match `build.gradle.kts`; GitHub Packages publish is skipped when the version already exists (no more 409); release notes document the GitHub Packages install.
-- 🔧 **Internals**: config hash uses SHA-256 instead of `String.hashCode()`; duplicate task-input registrations removed; `projectBuildDir` wired lazily; POM license `distribution` corrected to `repo`.
-- 🧪 **Tests**: 8 new `SymbolSetGeneratorTest` cases + 3 new `SwiftUISourceDirResolutionTest` cases.
-- 📝 **Docs**: README log samples/error messages corrected, example baseline and `Config.xcconfig` bundle id fixed, AGENTS.md structure tree completed.
+### v0.6.4 (latest)
+- **Windows local-icons bug fixed**: `localIcons { }` glob patterns no longer convert `/` to `File.separator` — Java globs use `/` on every platform and a backslash is a glob escape, so every include/exclude pattern silently matched nothing on Windows. Heals the 9 `LocalIconsBuilderTest`/`GenerateSymbolsTaskTest` cases that always failed on Windows (full suite now green everywhere) and makes local icons work at all on Windows machines.
+- **Failure semantics hardened**: SVG-to-Compose and `.symbolset` conversion failures now fail the build instead of being logged and swallowed — previously the `@CacheableTask` recorded success with partial output and cached the broken state.
+- **Cache integrity verified**: the SHA-256 recorded in cache metadata is now checked on read; tampered/truncated cache payloads are discarded and re-downloaded. Security-scan regexes are compiled once (class level) instead of per download.
+- **Collision-proof cache keys**: `ExternalIconConfig`/`LocalIconConfig` cache keys use a truncated SHA-256 instead of 32-bit `String.hashCode()` (old entries simply re-download once).
+- **Dead weight removed**: `MaterialSymbolsPresets`, `NameTransformerFactory.create`, `Svg2ComposeConverter.convertSingleFile`/`canProcess`, the unused `gradleUserHomeDir` task input, the unused `NamingConfig` `ObjectFactory`, and the legacy `merge*Assets`/`process*Resources`/metadata task wiring (generated icons are Kotlin sources — asset tasks never consume them). The remaining name-based compile wiring is lazy (`configureEach`); `afterEvaluate` is fully gone.
+- **Extension plumbing**: the project directory is now injected via `ProjectLayout` constructor injection instead of a public mutable `projectDirectory` DSL property users should never have seen.
+- **Docs**: README rewritten (1125 -> ~250 lines, no emoji-decorated log samples); emojis stripped from all sources, docs and CI output; stale KDoc examples fixed (`IconConfig.buildUrl` signature, `materialSymbol` builder, SwiftUI catalog wording).
+- **Internals**: per-call regex compilation hoisted in `IconNameTransformer`; download-progress logging simplified; cache TTL read logic deduplicated; redundant `SymbolWeight.REGULAR` alias comparisons removed.
+
+### v0.6.3
+- **Gradle output contract fixed**: `Symbols.swift`'s write location is now a declared `@Optional @OutputDirectory` on `GenerateSymbolsTask` (`swiftUISourceDir`), resolved via lazy providers at configuration time — no more `afterEvaluate`, no undeclared outputs, correct up-to-date/build-cache behavior. `GenerationContext` carries both SwiftUI directories as the single source of truth.
+- **`.xcassets` detection generalized**: the redirect now matches a catalog anywhere in the output path (case-insensitive), so a dedicated child like `Assets.xcassets/SymbolCraft` (recommended — keeps the task output from overlapping your hand-managed assets) also redirects `Symbols.swift` to the catalog parent.
+- **Stale-file hygiene**: the pre-generation cleaner and `cleanSymbolCraftIcons` now remove generated `Symbols.swift` from the source location too (output dir, catalog parent, custom dir), guarded by the `// Generated by SymbolCraft` header check so user files are never deleted; `cleanSymbolCraftIcons` also removes `.symbolset` bundles.
+- **SVG fidelity**: `fill-rule`/`clip-rule` attributes are preserved through `.symbolset` generation (Bootstrap Icons/Heroicons holes render correctly); single-quoted SVG attributes accepted; a warning is logged when a `<path>` carries an ignored `transform`.
+- **Fail-fast validation**: non-positive/non-finite `scaleFactor` rejected; duplicate symbol set names after sanitization fail with an actionable message; `generateSwiftEnumFile` creates missing output directories and dedupes Swift case names that collide with each other or with reserved members (`pointScale`, `allCases`, `image`, `rawValue`).
+- **Compile wiring widened**: added `org.jetbrains.kotlin.js`, `com.android.dynamic-feature`, `com.android.test` to the type-based `KotlinCompileTool` wiring; a diagnostic is logged if the reflective lookup ever fails.
+- **CI/release hardening**: `notify` now tracks the GitHub Packages job; Portal/Maven Central jobs are dormant behind `ENABLE_GRADLE_PORTAL`/`ENABLE_MAVEN_CENTRAL` repo variables; release job fails fast when the commit-message version doesn't match `build.gradle.kts`; GitHub Packages publish is skipped when the version already exists (no more 409); release notes document the GitHub Packages install.
+- **Internals**: config hash uses SHA-256 instead of `String.hashCode()`; duplicate task-input registrations removed; `projectBuildDir` wired lazily; POM license `distribution` corrected to `repo`.
+- **Tests**: 8 new `SymbolSetGeneratorTest` cases + 3 new `SwiftUISourceDirResolutionTest` cases.
+- **Docs**: README log samples/error messages corrected, example baseline and `Config.xcconfig` bundle id fixed, AGENTS.md structure tree completed.
 
 ### v0.6.2
-- 🍏 **`.xcassets`-compatible Swift sources**: new optional `swiftSourceOutputDirectory` DSL property. When `swiftUI.outputDirectory` points at an Xcode asset catalog (so `.symbolset` bundles compile via a synchronized group without the manual drag-in step), `Symbols.swift` is now written to the catalog's parent directory instead of inside it — Xcode treats catalogs as leaves, so Swift sources inside `.xcassets` were invisible to the compiler, making `generateSwiftEnum` and catalog output mutually exclusive. Stale in-catalog `Symbols.swift` copies are removed by the pre-generation cleaner.
-- 🧪 **Tests**: new `SwiftUISourceDirResolutionTest` (5 cases: plain folder, `.xcassets` redirect, relative/absolute override, blank fallback).
+- **`.xcassets`-compatible Swift sources**: new optional `swiftSourceOutputDirectory` DSL property. When `swiftUI.outputDirectory` points at an Xcode asset catalog (so `.symbolset` bundles compile via a synchronized group without the manual drag-in step), `Symbols.swift` is now written to the catalog's parent directory instead of inside it — Xcode treats catalogs as leaves, so Swift sources inside `.xcassets` were invisible to the compiler, making `generateSwiftEnum` and catalog output mutually exclusive. Stale in-catalog `Symbols.swift` copies are removed by the pre-generation cleaner.
+- **Tests**: new `SwiftUISourceDirResolutionTest` (5 cases: plain folder, `.xcassets` redirect, relative/absolute override, blank fallback).
 
 ### v0.6.1
-- 🔧 **Compile-task wiring fix**: generation is now wired into every `KotlinCompileTool` task by type (loaded reflectively), fixing builds where the Kotlin compile task name contains no "Kotlin" — e.g. AGP 9.x built-in Kotlin / KMP modules (`compileAndroidMain`), which previously failed with "uses this output of task ':generateSymbolCraftIcons' without declaring a dependency".
-- 📐 **SwiftUI fixed-size helper**: generated `Symbols.swift` now includes `GeneratedSymbol.pointScale` (= 1 / (1.7 × 0.7 × scaleFactor)) and `image(boxSize:)`, so a symbol can be rendered in an exact point box (e.g. `GeneratedSymbol.homeOutlined.image(boxSize: 24)`) instead of only sizing by font.
-- 🧪 **Tests**: 2 new `SymbolSetGeneratorTest` cases (pointScale value, scaleFactor baking).
+- **Compile-task wiring fix**: generation is now wired into every `KotlinCompileTool` task by type (loaded reflectively), fixing builds where the Kotlin compile task name contains no "Kotlin" — e.g. AGP 9.x built-in Kotlin / KMP modules (`compileAndroidMain`), which previously failed with "uses this output of task ':generateSymbolCraftIcons' without declaring a dependency".
+- **SwiftUI fixed-size helper**: generated `Symbols.swift` now includes `GeneratedSymbol.pointScale` (= 1 / (1.7 × 0.7 × scaleFactor)) and `image(boxSize:)`, so a symbol can be rendered in an exact point box (e.g. `GeneratedSymbol.homeOutlined.image(boxSize: 24)`) instead of only sizing by font.
+- **Tests**: 2 new `SymbolSetGeneratorTest` cases (pointScale value, scaleFactor baking).
 
 ### v0.6.0
-- 🍏 **SwiftUI output**: New `swiftUI { }` DSL generating custom SF Symbol `.symbolset` bundles (template v2.0, full 27 weight/scale variant grid) from the same downloaded SVGs; Material weights map to genuine SF weight columns; optional `Symbols.swift` helper enum.
-- 📦 **GitHub Packages publishing**: New `GitHubPackages` Maven repository target (`publishAllPublicationsToGitHubPackagesRepository`) plus a `publish-github-packages` CI job — no Sonatype namespace verification required.
-- 🧪 **Tests**: New `SymbolSetGeneratorTest` (20 cases: template structure, guide constants, geometry centering, weight mapping, determinism, name sanitization).
-- 📝 **Docs**: AGENTS.md rewritten in English; README_ZH.md removed.
+- **SwiftUI output**: New `swiftUI { }` DSL generating custom SF Symbol `.symbolset` bundles (template v2.0, full 27 weight/scale variant grid) from the same downloaded SVGs; Material weights map to genuine SF weight columns; optional `Symbols.swift` helper enum.
+- **GitHub Packages publishing**: New `GitHubPackages` Maven repository target (`publishAllPublicationsToGitHubPackagesRepository`) plus a `publish-github-packages` CI job — no Sonatype namespace verification required.
+- **Tests**: New `SymbolSetGeneratorTest` (20 cases: template structure, guide constants, geometry centering, weight mapping, determinism, name sanitization).
+- **Docs**: AGENTS.md rewritten in English; README_ZH.md removed.
 
 ### v0.5.0
-- ⚠️ **Breaking change**: Built-in `materialSymbol()` / `materialSymbols()` filled Material Symbols names changed from `...fill1` to `...Fill`, avoiding leaking the Google Fonts URL suffix into the Kotlin API.
-- 📚 **Multi-source docs**: README gained configuration examples for built-in Material Symbols, external CDN/npm SVG packages, multi-variant external sources, and local SVGs.
-- 🧪 **Example sync**: example regenerated filled Material Symbols and updated references such as `HomeW400OutlinedFill` and `SettingsW500RoundedFill`.
+- **Breaking change**: Built-in `materialSymbol()` / `materialSymbols()` filled Material Symbols names changed from `...fill1` to `...Fill`, avoiding leaking the Google Fonts URL suffix into the Kotlin API.
+- **Multi-source docs**: README gained configuration examples for built-in Material Symbols, external CDN/npm SVG packages, multi-variant external sources, and local SVGs.
+- **Example sync**: example regenerated filled Material Symbols and updated references such as `HomeW400OutlinedFill` and `SettingsW500RoundedFill`.
 
 ### v0.4.0
-- 👀 **Compose Preview configuration**: New `previewAnnotationClass`, supporting the modern Compose Multiplatform default AndroidX preview annotation as well as the legacy JetBrains one.
-- 🧹 **Example source root adjustment**: example generated-icons directory moved to `src/commonMain/generated/symbols`, reducing IDE package-path warnings.
-- 🔗 **Example external source update**: the official Material Symbols external source switched to esm.sh with a `-fill` variant configuration.
+- **Compose Preview configuration**: New `previewAnnotationClass`, supporting the modern Compose Multiplatform default AndroidX preview annotation as well as the legacy JetBrains one.
+- **Example source root adjustment**: example generated-icons directory moved to `src/commonMain/generated/symbols`, reducing IDE package-path warnings.
+- **Example external source update**: the official Material Symbols external source switched to esm.sh with a `-fill` variant configuration.
 
 ### v0.3.1
-- 🛡️ **Security hardening**: Blocked XXE and path-traversal attacks in external SVGs, added content-type and size validation, and fully sanitized dangerous path characters.
-- ♻️ **Task split**: `GenerateSymbolsTask` split into smaller steps; more readable log output and groundwork for unit tests.
-- 📚 **Documentation**: Documented key constants and default-value design to help contributors understand the configuration quickly.
+- **Security hardening**: Blocked XXE and path-traversal attacks in external SVGs, added content-type and size validation, and fully sanitized dangerous path characters.
+- **Task split**: `GenerateSymbolsTask` split into smaller steps; more readable log output and groundwork for unit tests.
+- **Documentation**: Documented key constants and default-value design to help contributors understand the configuration quickly.
 
 ### v0.3.0
-- 🔄 **Multi-variant external icons**: `styleParam { values(...) }` supports Cartesian-product combinations; one declaration generates multiple external icon variants.
-- ⚡ **Exponential backoff retry**: The SVG downloader supports exponential backoff, more robust under unstable networks.
-- 🔗 **Official CDN**: Material Symbols switched to the official Google Fonts CDN by default for availability and freshness.
-- ⚙️ **Configuration cache fix**: Resolved Gradle configuration-cache serialization issues, improving incremental-build compatibility.
-- 🏷️ **Naming transformation rewrite**: Rewrote IconNameTransformer; naming configuration is more flexible and reliable.
+- **Multi-variant external icons**: `styleParam { values(...) }` supports Cartesian-product combinations; one declaration generates multiple external icon variants.
+- **Exponential backoff retry**: The SVG downloader supports exponential backoff, more robust under unstable networks.
+- **Official CDN**: Material Symbols switched to the official Google Fonts CDN by default for availability and freshness.
+- **Configuration cache fix**: Resolved Gradle configuration-cache serialization issues, improving incremental-build compatibility.
+- **Naming transformation rewrite**: Rewrote IconNameTransformer; naming configuration is more flexible and reliable.
 
 ### v0.2.1
-- 🔥 **Major refactor**: Plugin renamed to SymbolCraft (from MaterialSymbolsPlugin)
-- 🎉 **Multi-library support**: Material Symbols + Bootstrap Icons + Heroicons + custom URLs
-- 🏷️ **Flexible naming**: PascalCase, camelCase, snake_case and more
-- ⚡ **Configurable retry**: Added maxRetries and retryDelayMs
-- 📚 **Dokka V2**: Full API documentation generation
-- 📦 **New DSL**: externalIcon/externalIcons methods
-- 🧹 **Updated cache**: symbolcraft-cache directory (from material-symbols-cache)
-- 📝 **Documentation**: Updated all READMEs and the developer guide
+- **Major refactor**: Plugin renamed to SymbolCraft (from MaterialSymbolsPlugin)
+- **Multi-library support**: Material Symbols + Bootstrap Icons + Heroicons + custom URLs
+- **Flexible naming**: PascalCase, camelCase, snake_case and more
+- **Configurable retry**: Added maxRetries and retryDelayMs
+- **Dokka V2**: Full API documentation generation
+- **New DSL**: externalIcon/externalIcons methods
+- **Updated cache**: symbolcraft-cache directory (from material-symbols-cache)
+- **Documentation**: Updated all READMEs and the developer guide
 
 ### v0.1.2
-- 🎉 Absolute-path cache configuration support
-- 🧹 Smart cache cleanup (skips shared caches)
-- 📝 Documentation updates
+- Absolute-path cache configuration support
+- Smart cache cleanup (skips shared caches)
+- Documentation updates
 
 ### v0.1.1
-- 🐛 Fixed example preview rendering errors
-- ♻️ Refactored SymbolWeight into an enum
-- 📦 Absolute-path support for the cache directory
+- Fixed example preview rendering errors
+- Refactored SymbolWeight into an enum
+- Absolute-path support for the cache directory
 
 ### v0.1.0
-- 🚀 Initial release
-- ✅ Core functionality complete
-- 📚 Complete documentation
-- 🎨 Example project
+- Initial release
+- Core functionality complete
+- Complete documentation
+- Example project
 
 ---
 

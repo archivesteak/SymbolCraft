@@ -19,7 +19,6 @@ class SymbolCraftPlugin : Plugin<Project> {
     /** Installs the extension and all supporting tasks on the target [project]. */
     override fun apply(project: Project) {
         val extension = project.extensions.create("symbolCraft", SymbolCraftExtension::class.java)
-        extension.projectDirectory.set(project.layout.projectDirectory.asFile.absolutePath)
 
         val swiftUI = extension.swiftUIConfig
         val projectDir = project.layout.projectDirectory.asFile
@@ -69,7 +68,6 @@ class SymbolCraftPlugin : Plugin<Project> {
                 task.extension.set(extension)
                 task.outputDir.set(project.layout.projectDirectory.dir(extension.outputDirectory))
                 task.cacheDirectory.set(extension.cacheDirectory)
-                task.gradleUserHomeDir.set(project.gradle.gradleUserHomeDir.absolutePath)
                 task.projectBuildDir.set(
                     project.layout.buildDirectory.map { it.asFile.absolutePath }
                 )
@@ -154,42 +152,17 @@ class SymbolCraftPlugin : Plugin<Project> {
             }
         }
 
-        project.afterEvaluate {
-            // Belt-and-braces name-based wiring for resource/asset tasks and any Kotlin
-            // compile task flavor not covered by the type-based wiring above.
-            project.tasks.configureEach { task ->
-                val n = task.name
-                if (
-                    n.startsWith("compile", ignoreCase = true) &&
-                        n.contains("Kotlin", ignoreCase = true)
-                ) {
-                    task.dependsOn(generateTaskProvider)
-                }
-                // Fix metadata compilation dependency for multiplatform projects
-                if (n.contains("compileCommonMainKotlinMetadata", ignoreCase = true)) {
-                    task.dependsOn(generateTaskProvider)
-                }
-                // Fix Android compilation dependencies
-                if (
-                    n.contains("compileDebugKotlin", ignoreCase = true) ||
-                        n.contains("compileReleaseKotlin", ignoreCase = true)
-                ) {
-                    task.dependsOn(generateTaskProvider)
-                }
-                // Fix Android asset merging dependency
-                if (
-                    n.contains("merge", ignoreCase = true) &&
-                        n.contains("Assets", ignoreCase = true)
-                ) {
-                    task.dependsOn(generateTaskProvider)
-                }
-                // Also add dependency for resource processing
-                if (
-                    n.contains("process", ignoreCase = true) &&
-                        n.contains("Resources", ignoreCase = true)
-                ) {
-                    task.dependsOn(generateTaskProvider)
-                }
+        // Name-based fallback, only relevant when the reflective KotlinCompileTool lookup above
+        // fails (it logs an info diagnostic). Generated icons are Kotlin sources, so only Kotlin
+        // compile tasks need this dependency — asset/resource tasks never consume them.
+        // configureEach is lazy: tasks registered after this plugin still get wired.
+        project.tasks.configureEach { task ->
+            val n = task.name
+            if (
+                n.startsWith("compile", ignoreCase = true) &&
+                    n.contains("Kotlin", ignoreCase = true)
+            ) {
+                task.dependsOn(generateTaskProvider)
             }
         }
     }

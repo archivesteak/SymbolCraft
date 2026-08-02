@@ -26,6 +26,7 @@ public enum GeneratedSymbol: String, CaseIterable {
     case settingsOutlined = "SettingsOutlined"
     case settingsRoundedFill = "SettingsRoundedFill"
     case telephoneSvgrepoCom = "TelephoneSvgrepoCom"
+    case testSvgsPenSvgrepoCom = "TestSvgsPenSvgrepoCom"
 
     /// The symbol as a SwiftUI `Image`.
     public var image: Image { Image(rawValue) }

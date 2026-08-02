@@ -19,17 +19,17 @@ internal class SvgConversionCoordinator(
      * Converts each library subdirectory produced by the download phase.
      *
      * @param context shared generation context holding output directories and DSL configuration
-     * @param iconsByLibrary mapping of library identifier → icon names, primarily for logging
+     * @param iconsByLibrary mapping of library identifier -> icon names, primarily for logging
      */
     fun convert(context: GenerationContext, iconsByLibrary: Map<String, Set<String>>) {
-        logger.lifecycle("🔄 Converting SVGs to Compose ImageVectors...")
+        logger.lifecycle("Converting SVGs to Compose ImageVectors...")
 
         var totalConverted = 0
 
         iconsByLibrary.forEach { (libraryId, _) ->
             val libraryTempDir = context.tempDir.resolve(libraryId)
             if (!libraryTempDir.exists() || libraryTempDir.listFiles()?.isEmpty() != false) {
-                logger.warn("⚠️ No SVG files found for library: $libraryId")
+                logger.warn("No SVG files found for library: $libraryId")
                 return@forEach
             }
 
@@ -54,12 +54,12 @@ internal class SvgConversionCoordinator(
                     )
                 }
 
-            logger.lifecycle("   📚 Converting library: $libraryId → icons/$librarySubdir/")
+            logger.lifecycle("   Converting library: $libraryId -> icons/$librarySubdir/")
             if (ext.namingConfig.transformer.isPresent) {
-                logger.debug("   🔄 Using custom transformer")
+                logger.debug("   Using custom transformer")
             } else {
                 logger.debug(
-                    "   🔄 Using transformer: ${ext.namingConfig.namingConvention.get()} (suffix='${ext.namingConfig.suffix.get()}', prefix='${ext.namingConfig.prefix.get()}')"
+                    "   Using transformer: ${ext.namingConfig.namingConvention.get()} (suffix='${ext.namingConfig.suffix.get()}', prefix='${ext.namingConfig.prefix.get()}')"
                 )
             }
 
@@ -77,33 +77,38 @@ internal class SvgConversionCoordinator(
                 )
                 val iconCount = libraryTempDir.listFiles()?.size ?: 0
                 totalConverted += iconCount
-                logger.lifecycle("      ✅ Converted $iconCount icons")
+                logger.lifecycle("      Converted $iconCount icons")
             } catch (e: Exception) {
-                logger.error("❌ SVG conversion failed for library $libraryId: ${e.message}")
+                // Rethrow after logging: swallowing the failure would let the task succeed with
+                // partial output, and the @CacheableTask would then cache that broken state.
+                logger.error("SVG conversion failed for library $libraryId: ${e.message}")
                 logger.error("   Stack trace: ${e.stackTraceToString()}")
                 when {
                     e.message?.contains("directory", ignoreCase = true) == true -> {
                         logger.error(
-                            "   💡 Directory issue: Check input/output directories exist and are writable"
+                            "   Hint: directory issue — check input/output directories exist and are writable"
                         )
                     }
                     e.message?.contains("package", ignoreCase = true) == true -> {
                         logger.error(
-                            "   💡 Package issue: Check packageName is valid Kotlin package identifier"
+                            "   Hint: package issue — check packageName is a valid Kotlin package identifier"
                         )
                     }
                     e.message?.contains("SVG", ignoreCase = true) == true -> {
                         logger.error(
-                            "   💡 SVG parsing issue: Some downloaded SVG files may be malformed"
+                            "   Hint: SVG parsing issue — some downloaded SVG files may be malformed"
                         )
                     }
                     else -> {
-                        logger.error("   💡 Unexpected conversion error: ${e.javaClass.simpleName}")
+                        logger.error(
+                            "   Hint: unexpected conversion error: ${e.javaClass.simpleName}"
+                        )
                     }
                 }
+                throw e
             }
         }
 
-        logger.lifecycle("✅ Successfully converted $totalConverted icons total")
+        logger.lifecycle("Successfully converted $totalConverted icons total")
     }
 }

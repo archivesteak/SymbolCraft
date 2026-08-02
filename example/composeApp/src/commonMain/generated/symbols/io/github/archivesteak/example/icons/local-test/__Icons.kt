@@ -2,6 +2,7 @@ package io.github.archivesteak.example.icons.`local-test`
 
 import androidx.compose.ui.graphics.vector.ImageVector
 import io.github.archivesteak.example.icons.`local-test`.icons.TelephoneSvgrepoCom
+import io.github.archivesteak.example.icons.`local-test`.icons.TestSvgsPenSvgrepoCom
 import kotlin.collections.List as ____KtList
 
 public object Icons
@@ -13,6 +14,6 @@ public val Icons.AllIcons: ____KtList<ImageVector>
     if (__AllIcons != null) {
       return __AllIcons!!
     }
-    __AllIcons= listOf(TelephoneSvgrepoCom)
+    __AllIcons= listOf(TelephoneSvgrepoCom, TestSvgsPenSvgrepoCom)
     return __AllIcons!!
   }

@@ -24,8 +24,6 @@ abstract class ValidateSymbolsConfigTask : DefaultTask() {
             )
         }
         val count = config.values.sumOf { it.size }
-        logger.lifecycle(
-            "✅ Valid configuration. Icons: ${config.size}, Total configurations: $count"
-        )
+        logger.lifecycle("Valid configuration. Icons: ${config.size}, Total configurations: $count")
     }
 }

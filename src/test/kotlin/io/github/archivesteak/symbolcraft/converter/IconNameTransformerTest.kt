@@ -199,22 +199,6 @@ class IconNameTransformerTest {
     // ========== NameTransformerFactory ==========
 
     @Test
-    fun `NameTransformerFactory - create for material-symbols`() {
-        val transformer = NameTransformerFactory.create("material-symbols")
-
-        assertTrue(transformer is ConventionNameTransformer)
-        assertEquals("ArrowLeft", transformer.transform("arrow-left"))
-    }
-
-    @Test
-    fun `NameTransformerFactory - create for external library`() {
-        val transformer = NameTransformerFactory.create("external-bootstrap-icons")
-
-        assertTrue(transformer is ConventionNameTransformer)
-        assertEquals("ArrowLeft", transformer.transform("arrow-left"))
-    }
-
-    @Test
     fun `NameTransformerFactory - pascalCase`() {
         val transformer = NameTransformerFactory.pascalCase()
         assertEquals("ArrowLeft", transformer.transform("arrow-left"))

@@ -85,7 +85,7 @@ class SymbolSetGenerator(private val logger: (String) -> Unit = {}) {
             File(dir, "Contents.json").writeText(buildContentsJson(spec.name))
 
             results += SymbolSetResult(spec.name, dir)
-            logger("      ✅ Generated ${spec.name}.symbolset (${glyphSvgs.size} real glyph(s))")
+            logger("      Generated ${spec.name}.symbolset (${glyphSvgs.size} real glyph(s))")
         }
 
         return results.sortedBy { it.symbolSetName }
@@ -117,7 +117,7 @@ class SymbolSetGenerator(private val logger: (String) -> Unit = {}) {
             }
         }
 
-        // Material Symbols: group by (iconName, variant, fill) → one symbol set per glyph style.
+        // Material Symbols: group by (iconName, variant, fill) -> one symbol set per glyph style.
         materialEntries
             .groupBy { (iconName, config) -> Triple(iconName, config.variant, config.fill) }
             .toSortedMap(compareBy({ it.first }, { it.second.name }, { it.third.name }))
@@ -141,7 +141,7 @@ class SymbolSetGenerator(private val logger: (String) -> Unit = {}) {
                                 )
                             if (weightEntries.size > 1) {
                                 logger(
-                                    "      ⚠️ Multiple grade/optical-size configs for " +
+                                    "      Warning: multiple grade/optical-size configs for " +
                                         "${iconName} W${weight.value} ${variant.pathName}; " +
                                         "using grade ${chosen.second.grade}"
                                 )
@@ -358,9 +358,9 @@ class SymbolSetGenerator(private val logger: (String) -> Unit = {}) {
             }
 
         // A `.symbolset` glyph sizes with the FONT point size, not with a fixed box. At font
-        // size P the M-row capline→baseline band maps to the font cap height (≈0.7 em for SF
+        // size P the M-row capline->baseline band maps to the font cap height (≈0.7 em for SF
         // Pro), and our glyphs span OPTICAL_SCALING × scaleFactor × that band, so the artwork
-        // box is P × 0.7 × 1.7 × scaleFactor. Inverting gives the box→font multiplier.
+        // box is P × 0.7 × 1.7 × scaleFactor. Inverting gives the box->font multiplier.
         val pointScale = 1.0 / (OPTICAL_SCALING * CAP_HEIGHT_TO_EM_RATIO * scaleFactor)
 
         val content = buildString {
@@ -429,7 +429,7 @@ class SymbolSetGenerator(private val logger: (String) -> Unit = {}) {
                     val tag = match.groupValues[1]
                     if (TRANSFORM_ATTR_REGEX.containsMatchIn(tag)) {
                         logger(
-                            "      ⚠️ <path> in ${svgFile.name} carries a transform attribute; " +
+                            "      Warning: <path> in ${svgFile.name} carries a transform attribute; " +
                                 "it is ignored and the glyph may render shifted"
                         )
                     }
@@ -527,7 +527,7 @@ class SymbolSetGenerator(private val logger: (String) -> Unit = {}) {
         // Optical enlargement shared by both reference converters (Cookpad, create-symbol).
         const val OPTICAL_SCALING = 1.7
 
-        // SF Pro cap-height-to-em ratio; the M-row capline→baseline band maps to the font cap
+        // SF Pro cap-height-to-em ratio; the M-row capline->baseline band maps to the font cap
         // height at render time, which is what ties .symbolset glyph size to the font point size.
         const val CAP_HEIGHT_TO_EM_RATIO = 0.7
 

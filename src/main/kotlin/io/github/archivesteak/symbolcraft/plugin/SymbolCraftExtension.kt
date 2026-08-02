@@ -8,6 +8,7 @@ import java.nio.file.Path
 import java.nio.file.PathMatcher
 import javax.inject.Inject
 import org.gradle.api.Action
+import org.gradle.api.file.ProjectLayout
 import org.gradle.api.model.ObjectFactory
 import org.gradle.api.provider.Property
 
@@ -28,8 +29,9 @@ import org.gradle.api.provider.Property
  * @property maxRetries maximum number of retry attempts for failed downloads (default: 3).
  * @property retryDelayMs initial delay between retries in milliseconds (default: 1000ms).
  */
-abstract class SymbolCraftExtension {
-    @get:Inject protected abstract val objects: ObjectFactory
+abstract class SymbolCraftExtension
+@Inject
+constructor(private val layout: ProjectLayout, private val objects: ObjectFactory) {
     abstract val cacheEnabled: Property<Boolean>
     abstract val cacheDirectory: Property<String>
     abstract val outputDirectory: Property<String>
@@ -38,10 +40,13 @@ abstract class SymbolCraftExtension {
     abstract val previewAnnotationClass: Property<String>
     abstract val maxRetries: Property<Int>
     abstract val retryDelayMs: Property<Long>
-    abstract val projectDirectory: Property<String>
+
+    /** Absolute path of the consuming project's directory, injected by Gradle. */
+    internal val projectDir: File
+        get() = layout.projectDirectory.asFile
 
     /**
-     * Icon naming configuration。
+     * Icon naming configuration.
      *
      * Use the [naming] method to configure naming transformation.
      */
@@ -69,7 +74,6 @@ abstract class SymbolCraftExtension {
         previewAnnotationClass.convention(SymbolCraftDefaults.PREVIEW_ANNOTATION_CLASS)
         maxRetries.convention(3)
         retryDelayMs.convention(1000L)
-        projectDirectory.convention("")
     }
 
     /**
@@ -150,7 +154,7 @@ abstract class SymbolCraftExtension {
      * ```kotlin
      * materialSymbol("home") {
      *     weights(400, 500, 700)
-     *     variant = SymbolVariant.OUTLINED
+     *     style(weight = 400, variant = SymbolVariant.ROUNDED, fill = SymbolFill.FILLED)
      * }
      * ```
      *
@@ -278,15 +282,9 @@ abstract class SymbolCraftExtension {
      * @param configure Configuration block describing the local icon search
      */
     fun localIcons(libraryName: String = "local", configure: LocalIconsBuilder.() -> Unit) {
-        val projectDir =
-            projectDirectory.orNull
-                ?: throw IllegalStateException(
-                    "Project directory is not set on SymbolCraftExtension"
-                )
-
         validateLocalLibraryName(libraryName)
 
-        val builder = LocalIconsBuilder(projectDir)
+        val builder = LocalIconsBuilder(projectDir.absolutePath)
         builder.configure()
         val localConfigs = builder.build(libraryName)
         localConfigs.forEach { (iconName, config) -> iconConfig(iconName, config) }
@@ -594,9 +592,11 @@ class LocalIconsBuilder internal constructor(private val projectDir: String) {
     }
 
     private fun compileGlob(pattern: String): PathMatcher {
+        // Java glob patterns use "/" as the separator on every platform (the implementation
+        // translates it); a literal backslash in a glob is an ESCAPE character, so converting
+        // to File.separator here broke every pattern on Windows.
         val normalized = pattern.trim().ifBlank { "**/*.svg" }
-        val systemPattern = normalized.replace("/", File.separator)
-        return FileSystems.getDefault().getPathMatcher("glob:$systemPattern")
+        return FileSystems.getDefault().getPathMatcher("glob:$normalized")
     }
 
     private fun matches(relativePath: Path, matchers: List<PathMatcher>): Boolean {

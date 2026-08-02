@@ -103,6 +103,32 @@ class SvgDownloader(
          * parallelism. Most CDNs can handle 20+ concurrent connections.
          */
         const val MAX_CONNECTIONS_PER_ROUTE = 20
+
+        /**
+         * Dangerous SVG patterns scanned on every download. Kept at class level so the regexes are
+         * compiled once instead of per downloaded file.
+         */
+        private val DANGEROUS_SVG_PATTERNS =
+            mapOf(
+                Regex("<!\\s*ENTITY", RegexOption.IGNORE_CASE) to
+                    "XML External Entity (XXE) declaration",
+                Regex("<!\\s*DOCTYPE", RegexOption.IGNORE_CASE) to
+                    "DOCTYPE declaration (potential XXE vector)",
+                Regex("<\\s*script", RegexOption.IGNORE_CASE) to "Embedded JavaScript",
+                Regex("javascript:", RegexOption.IGNORE_CASE) to "JavaScript protocol handler",
+                Regex("data:text/html", RegexOption.IGNORE_CASE) to "HTML data URL",
+                Regex("on\\w+\\s*=", RegexOption.IGNORE_CASE) to "Event handler attribute",
+                Regex("<\\s*iframe", RegexOption.IGNORE_CASE) to "Embedded iframe",
+                Regex("<\\s*object", RegexOption.IGNORE_CASE) to "Embedded object",
+                Regex("<\\s*embed", RegexOption.IGNORE_CASE) to "Embedded content",
+                Regex("xlink:href\\s*=\\s*\"?javascript:", RegexOption.IGNORE_CASE) to
+                    "XLink JavaScript protocol",
+            )
+
+        private val SYSTEM_ENTITY_REGEX = Regex("SYSTEM", RegexOption.IGNORE_CASE)
+        private val PUBLIC_ENTITY_REGEX = Regex("PUBLIC", RegexOption.IGNORE_CASE)
+        private val ENTITY_DECL_REGEX = Regex("<!\\s*ENTITY", RegexOption.IGNORE_CASE)
+        private val DOCTYPE_DECL_REGEX = Regex("<!\\s*DOCTYPE", RegexOption.IGNORE_CASE)
     }
 
     private val httpClient =
@@ -166,7 +192,7 @@ class SvgDownloader(
                     if (svgContent != null) {
                         if (attemptNumber > 0) {
                             log(
-                                "✅ Successfully downloaded after ${attemptNumber + 1} attempt(s): $url"
+                                "Successfully downloaded after ${attemptNumber + 1} attempt(s): $url"
                             )
                         }
                         return@withContext svgContent
@@ -177,7 +203,7 @@ class SvgDownloader(
 
                     if (remainingRetries > 0) {
                         val delayMs = retryDelayMs * (1 shl attemptNumber)
-                        log("⚠️ Attempt ${attemptNumber + 1} failed for $url: ${e.message}")
+                        log("Attempt ${attemptNumber + 1} failed for $url: ${e.message}")
                         log("   Retrying in ${delayMs}ms... ($remainingRetries retries remaining)")
                         delay(delayMs)
                     }
@@ -274,27 +300,7 @@ class SvgDownloader(
      * @throws SecurityException if dangerous content is detected
      */
     private fun validateSvgSecurity(svgContent: String, url: String) {
-        // List of dangerous patterns that should never appear in safe SVG files
-        // Using regex to prevent whitespace-based bypass attacks (e.g., "< script" instead of
-        // "<script")
-        val dangerousPatterns =
-            mapOf(
-                Regex("<!\\s*ENTITY", RegexOption.IGNORE_CASE) to
-                    "XML External Entity (XXE) declaration",
-                Regex("<!\\s*DOCTYPE", RegexOption.IGNORE_CASE) to
-                    "DOCTYPE declaration (potential XXE vector)",
-                Regex("<\\s*script", RegexOption.IGNORE_CASE) to "Embedded JavaScript",
-                Regex("javascript:", RegexOption.IGNORE_CASE) to "JavaScript protocol handler",
-                Regex("data:text/html", RegexOption.IGNORE_CASE) to "HTML data URL",
-                Regex("on\\w+\\s*=", RegexOption.IGNORE_CASE) to "Event handler attribute",
-                Regex("<\\s*iframe", RegexOption.IGNORE_CASE) to "Embedded iframe",
-                Regex("<\\s*object", RegexOption.IGNORE_CASE) to "Embedded object",
-                Regex("<\\s*embed", RegexOption.IGNORE_CASE) to "Embedded content",
-                Regex("xlink:href\\s*=\\s*\"?javascript:", RegexOption.IGNORE_CASE) to
-                    "XLink JavaScript protocol",
-            )
-
-        dangerousPatterns.forEach { (pattern, description) ->
+        DANGEROUS_SVG_PATTERNS.forEach { (pattern, description) ->
             if (pattern.containsMatchIn(svgContent)) {
                 throw SecurityException(
                     "SVG contains potentially dangerous content from $url: $description (pattern: '${pattern.pattern}'). " +
@@ -304,15 +310,10 @@ class SvgDownloader(
         }
 
         // Additional check: Ensure no SYSTEM or PUBLIC entities
-        val systemEntityRegex = Regex("SYSTEM", RegexOption.IGNORE_CASE)
-        val publicEntityRegex = Regex("PUBLIC", RegexOption.IGNORE_CASE)
-        val entityDeclRegex = Regex("<!\\s*ENTITY", RegexOption.IGNORE_CASE)
-        val doctypeDeclRegex = Regex("<!\\s*DOCTYPE", RegexOption.IGNORE_CASE)
-
         if (
-            systemEntityRegex.containsMatchIn(svgContent) &&
-                (entityDeclRegex.containsMatchIn(svgContent) ||
-                    doctypeDeclRegex.containsMatchIn(svgContent))
+            SYSTEM_ENTITY_REGEX.containsMatchIn(svgContent) &&
+                (ENTITY_DECL_REGEX.containsMatchIn(svgContent) ||
+                    DOCTYPE_DECL_REGEX.containsMatchIn(svgContent))
         ) {
             throw SecurityException(
                 "SVG contains SYSTEM entity declaration from $url. " +
@@ -321,9 +322,9 @@ class SvgDownloader(
         }
 
         if (
-            publicEntityRegex.containsMatchIn(svgContent) &&
-                (entityDeclRegex.containsMatchIn(svgContent) ||
-                    doctypeDeclRegex.containsMatchIn(svgContent))
+            PUBLIC_ENTITY_REGEX.containsMatchIn(svgContent) &&
+                (ENTITY_DECL_REGEX.containsMatchIn(svgContent) ||
+                    DOCTYPE_DECL_REGEX.containsMatchIn(svgContent))
         ) {
             throw SecurityException(
                 "SVG contains PUBLIC entity declaration from $url. " +
@@ -332,28 +333,44 @@ class SvgDownloader(
         }
     }
 
-    private fun getCachedSvg(cacheKey: String): String? {
-        val cacheFile = cachePath / "$cacheKey.svg"
+    /** Reads the cache metadata for [cacheKey], or null when missing, corrupt, or expired. */
+    private fun readFreshCacheMeta(cacheKey: String): List<String>? {
         val metaFile = cachePath / "$cacheKey.meta"
-
-        if (cacheFile.exists() && metaFile.exists()) {
-            try {
-                val meta = metaFile.readLines()
-                if (meta.size >= 2) {
-                    val timestamp = meta[0].toLong()
-
-                    // Check if cache is still valid (7 days)
-                    val maxAge = CACHE_MAX_AGE_MS // 7 days
-                    if (System.currentTimeMillis() - timestamp < maxAge) {
-                        return cacheFile.readText()
-                    }
-                }
-            } catch (e: Exception) {
-                // Cache corrupted, will re-download
+        if (!metaFile.exists()) return null
+        return try {
+            val meta = metaFile.readLines()
+            if (
+                meta.size >= 2 && System.currentTimeMillis() - meta[0].toLong() < CACHE_MAX_AGE_MS
+            ) {
+                meta
+            } else {
+                null
             }
+        } catch (e: Exception) {
+            null
         }
+    }
 
-        return null
+    private fun getCachedSvg(cacheKey: String): String? {
+        val meta = readFreshCacheMeta(cacheKey) ?: return null
+        val cacheFile = cachePath / "$cacheKey.svg"
+        if (!cacheFile.exists()) return null
+
+        return try {
+            val content = cacheFile.readText()
+
+            // Verify integrity when a hash was recorded (tampered or truncated cache
+            // payloads are discarded and re-downloaded).
+            if (meta.size >= 3 && calculateSHA256(content) != meta[2]) {
+                log("Cache integrity check failed for key $cacheKey; re-downloading")
+                null
+            } else {
+                content
+            }
+        } catch (e: Exception) {
+            // Cache corrupted, will re-download
+            null
+        }
     }
 
     /**
@@ -403,26 +420,7 @@ class SvgDownloader(
     /** Check if an SVG is cached and valid */
     fun isCached(cacheKey: String): Boolean {
         if (!cacheEnabled) return false
-
-        val cacheFile = cachePath / "$cacheKey.svg"
-        val metaFile = cachePath / "$cacheKey.meta"
-
-        if (cacheFile.exists() && metaFile.exists()) {
-            try {
-                val meta = metaFile.readLines()
-                if (meta.size >= 2) {
-                    val timestamp = meta[0].toLong()
-
-                    // Check if cache is still valid
-                    return System.currentTimeMillis() - timestamp < CACHE_MAX_AGE_MS
-                }
-            } catch (e: Exception) {
-                // Cache corrupted
-                return false
-            }
-        }
-
-        return false
+        return readFreshCacheMeta(cacheKey) != null && (cachePath / "$cacheKey.svg").exists()
     }
 
     /** Get cache statistics */

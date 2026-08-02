@@ -28,8 +28,8 @@ abstract class CleanSymbolsCacheTask : DefaultTask() {
         // Resolve cache directory: support both absolute and relative paths
         val cacheBaseDir = PathUtils.resolveCacheDirectory(cacheDirPath, projectBuildDirPath)
 
-        logger.lifecycle("🧹 Cleaning SymbolCraft icon cache...")
-        logger.lifecycle("📂 Cache location: ${cacheBaseDir.absolutePath}")
+        logger.lifecycle("Cleaning SymbolCraft icon cache...")
+        logger.lifecycle("Cache location: ${cacheBaseDir.absolutePath}")
 
         if (cacheBaseDir.exists()) {
             val svgCacheDir = File(cacheBaseDir, "svg-cache")
@@ -42,10 +42,10 @@ abstract class CleanSymbolsCacheTask : DefaultTask() {
                 val fileCount = svgCacheDir.listFiles()?.size ?: 0
                 if (svgCacheDir.deleteRecursively()) {
                     deletedCount += fileCount
-                    logger.lifecycle("   🧹 Cleaned SVG cache: $fileCount files")
+                    logger.lifecycle("   Cleaned SVG cache: $fileCount files")
                 } else {
                     logger.warn(
-                        "   ⚠️ Failed to clean SVG cache directory: ${svgCacheDir.absolutePath}"
+                        "   Failed to clean SVG cache directory: ${svgCacheDir.absolutePath}"
                     )
                 }
             }
@@ -55,18 +55,18 @@ abstract class CleanSymbolsCacheTask : DefaultTask() {
                 val tempFiles = tempSvgDir.listFiles()
                 deletedCount += tempFiles?.size ?: 0
                 tempSvgDir.deleteRecursively()
-                logger.lifecycle("   🧹 Cleaned temp SVGs: ${tempFiles?.size ?: 0} files")
+                logger.lifecycle("   Cleaned temp SVGs: ${tempFiles?.size ?: 0} files")
             }
 
             // Clean the cache directory itself if empty
             if (cacheBaseDir.listFiles()?.isEmpty() == true) {
                 cacheBaseDir.delete()
-                logger.lifecycle("   🧹 Removed empty cache directory")
+                logger.lifecycle("   Removed empty cache directory")
             }
 
-            logger.lifecycle("✅ Total cache cleaned: $deletedCount files")
+            logger.lifecycle("Total cache cleaned: $deletedCount files")
         } else {
-            logger.lifecycle("ℹ️  No cache to clean (directory does not exist)")
+            logger.lifecycle("No cache to clean (directory does not exist)")
         }
     }
 }

@@ -27,10 +27,11 @@ import org.gradle.api.provider.Property
  * @property generateSwiftEnum toggles generation of the `Symbols.swift` helper enum (default:
  *   true).
  * @property swiftSourceOutputDirectory directory where `Symbols.swift` is written (optional). When
- *   unset: if [outputDirectory] ends in `.xcassets`, the catalog's PARENT directory is used (Xcode
- *   treats asset catalogs as leaves — sources inside them are invisible to the Swift compiler, and
- *   synchronized file-system groups never descend into `.xcassets`); otherwise `Symbols.swift` is
- *   written next to the `.symbolset` bundles as before.
+ *   unset: if [outputDirectory] IS an `.xcassets` bundle or lives INSIDE one (matched
+ *   case-insensitively), the catalog's PARENT directory is used (Xcode treats asset catalogs as
+ *   leaves — sources inside them are invisible to the Swift compiler, and synchronized file-system
+ *   groups never descend into `.xcassets`); otherwise `Symbols.swift` is written next to the
+ *   `.symbolset` bundles as before.
  */
 abstract class SwiftUIConfig {
     abstract val enabled: Property<Boolean>

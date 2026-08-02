@@ -33,6 +33,20 @@ private fun sanitizeIconName(iconName: String): String {
 }
 
 /**
+ * Collision-resistant short hash for cache keys (first 16 hex chars of SHA-256).
+ *
+ * `String.hashCode()` is stable but only 32-bit: two different style-parameter sets can collide and
+ * silently poison the SVG cache. SHA-256 makes that effectively impossible.
+ */
+private fun stableShortHash(input: String): String {
+    val digest = java.security.MessageDigest.getInstance("SHA-256")
+    return digest
+        .digest(input.toByteArray(Charsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }
+        .take(16)
+}
+
+/**
  * Base interface for all icon library configurations.
  *
  * Users can implement this interface to support custom icon libraries.
@@ -45,8 +59,8 @@ private fun sanitizeIconName(iconName: String): String {
  * ) : IconConfig {
  *     override val libraryId = "my-custom-library"
  *
- *     override fun buildUrl(iconName: String, cdnBaseUrl: String): String {
- *         return "$cdnBaseUrl/my-library/$iconName.svg"
+ *     override fun buildUrl(iconName: String): String {
+ *         return "https://cdn.example.com/my-library/$iconName.svg"
  *     }
  *
  *     override fun getCacheKey(iconName: String): String {
@@ -118,8 +132,7 @@ data class LocalIconConfig(
 
     override fun getCacheKey(iconName: String): String {
         val normalized = absolutePath.replace("\\", "/")
-        val hash = normalized.lowercase().hashCode().toString(16)
-        return "${libraryId}_$hash"
+        return "${libraryId}_${stableShortHash(normalized.lowercase())}"
     }
 
     override fun getSignature(): String = buildSignature(relativePath)
@@ -181,9 +194,8 @@ data class MaterialSymbolsConfig(
     override fun buildUrl(iconName: String): String {
         val weightValue =
             when {
-                (weight == SymbolWeight.REGULAR || weight == SymbolWeight.W400) &&
-                    fill == SymbolFill.FILLED -> ""
-                (weight == SymbolWeight.REGULAR || weight == SymbolWeight.W400) -> "default"
+                weight == SymbolWeight.W400 && fill == SymbolFill.FILLED -> ""
+                weight == SymbolWeight.W400 -> "default"
                 else -> "wght${weight.value}"
             }
 
@@ -254,7 +266,7 @@ data class ExternalIconConfig(
         // sanitize again
         val paramsString =
             styleParams.entries.sortedBy { it.key }.joinToString("_") { "${it.key}=${it.value}" }
-        return "${safeName}_${libraryName}_${paramsString.hashCode()}"
+        return "${safeName}_${libraryName}_${stableShortHash(paramsString)}"
     }
 
     override fun getSignature(): String {
@@ -366,31 +378,4 @@ enum class SymbolWeight(val value: Int) {
     }
 
     override fun toString(): String = value.toString()
-}
-
-// Predefined Material Symbols configurations
-
-object MaterialSymbolsPresets {
-    // Common weight variants
-    val W400 = MaterialSymbolsConfig(weight = SymbolWeight.W400)
-    val W500 = MaterialSymbolsConfig(weight = SymbolWeight.W500)
-    val W700 = MaterialSymbolsConfig(weight = SymbolWeight.W700)
-
-    // Filled variants
-    val W400Filled = MaterialSymbolsConfig(weight = SymbolWeight.W400, fill = SymbolFill.FILLED)
-    val W500Filled = MaterialSymbolsConfig(weight = SymbolWeight.W500, fill = SymbolFill.FILLED)
-
-    // Style variants
-    val W400Rounded =
-        MaterialSymbolsConfig(weight = SymbolWeight.W400, variant = SymbolVariant.ROUNDED)
-    val W400Sharp = MaterialSymbolsConfig(weight = SymbolWeight.W400, variant = SymbolVariant.SHARP)
-
-    // Aliases
-    val Regular = W400
-    val Medium = W500
-    val Bold = W700
-    val RegularFilled = W400Filled
-    val MediumFilled = W500Filled
-    val Rounded = W400Rounded
-    val Sharp = W400Sharp
 }

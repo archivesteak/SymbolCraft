@@ -2,8 +2,6 @@ package io.github.archivesteak.symbolcraft.plugin
 
 import io.github.archivesteak.symbolcraft.converter.IconNameTransformer
 import io.github.archivesteak.symbolcraft.converter.NamingConvention
-import javax.inject.Inject
-import org.gradle.api.model.ObjectFactory
 import org.gradle.api.provider.Property
 
 /**
@@ -29,14 +27,14 @@ import org.gradle.api.provider.Property
  * }
  * ```
  */
-abstract class NamingConfig @Inject constructor(private val objects: ObjectFactory) {
+abstract class NamingConfig {
     /** Naming convention to apply (e.g., PASCAL_CASE, CAMEL_CASE). */
     abstract val namingConvention: Property<NamingConvention>
 
-    /** Suffix to append to generated class names (e.g., "Icon" → HomeIcon). */
+    /** Suffix to append to generated class names (e.g., "Icon" -> HomeIcon). */
     abstract val suffix: Property<String>
 
-    /** Prefix to prepend to generated class names (e.g., "Ic" → IcHome). */
+    /** Prefix to prepend to generated class names (e.g., "Ic" -> IcHome). */
     abstract val prefix: Property<String>
 
     /** Prefix to remove from input file names before transformation (e.g., "ic_"). */
@@ -64,7 +62,7 @@ abstract class NamingConfig @Inject constructor(private val objects: ObjectFacto
     /**
      * Apply PascalCase convention with optional suffix/prefix.
      *
-     * Example: home-icon → HomeIcon (with suffix = "Icon")
+     * Example: home-icon -> HomeIcon (with suffix = "Icon")
      *
      * @param suffix Optional suffix to append (e.g., "Icon")
      * @param prefix Optional prefix to prepend (e.g., "Ic")
@@ -78,7 +76,7 @@ abstract class NamingConfig @Inject constructor(private val objects: ObjectFacto
     /**
      * Apply camelCase convention with optional suffix/prefix.
      *
-     * Example: home-icon → homeIcon (with prefix = "ic" → icHomeIcon)
+     * Example: home-icon -> homeIcon (with prefix = "ic" -> icHomeIcon)
      *
      * @param suffix Optional suffix to append
      * @param prefix Optional prefix to prepend (e.g., "ic")
@@ -93,8 +91,8 @@ abstract class NamingConfig @Inject constructor(private val objects: ObjectFacto
      * Apply snake_case or SCREAMING_SNAKE_CASE convention.
      *
      * Example:
-     * - home-icon → home_icon (uppercase = false)
-     * - home-icon → HOME_ICON (uppercase = true)
+     * - home-icon -> home_icon (uppercase = false)
+     * - home-icon -> HOME_ICON (uppercase = true)
      *
      * @param uppercase If true, uses SCREAMING_SNAKE_CASE
      */
@@ -107,7 +105,7 @@ abstract class NamingConfig @Inject constructor(private val objects: ObjectFacto
     /**
      * Apply kebab-case convention.
      *
-     * Example: home_icon → home-icon
+     * Example: home_icon -> home-icon
      */
     fun kebabCase() {
         namingConvention.set(NamingConvention.KEBAB_CASE)
@@ -116,7 +114,7 @@ abstract class NamingConfig @Inject constructor(private val objects: ObjectFacto
     /**
      * Apply lowercase convention (removes all special characters).
      *
-     * Example: Home-Icon → homeicon
+     * Example: Home-Icon -> homeicon
      */
     fun lowerCase() {
         namingConvention.set(NamingConvention.LOWER_CASE)
@@ -125,7 +123,7 @@ abstract class NamingConfig @Inject constructor(private val objects: ObjectFacto
     /**
      * Apply UPPERCASE convention (removes all special characters).
      *
-     * Example: home-icon → HOMEICON
+     * Example: home-icon -> HOMEICON
      */
     fun upperCase() {
         namingConvention.set(NamingConvention.UPPER_CASE)

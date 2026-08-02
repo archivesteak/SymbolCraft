@@ -166,7 +166,7 @@ class SymbolSetGeneratorTest {
         val svg = buildSingleGlyphSvg()
         val (scale, tx, ty) = extractTransform(svg, "Regular-M")
 
-        // Glyph viewBox: 0 -960 960 960 → vertical span in template coords:
+        // Glyph viewBox: 0 -960 960 960 -> vertical span in template coords:
         // [ty + (-960)*scale, ty] must be centered on (1126 + 1055.54) / 2 = 1090.77
         val centerY = ty + (-960.0) * scale + (960.0 * scale) / 2
         assertEquals(1090.77, centerY, 0.1, "glyph not vertically centered for Regular-M")
@@ -537,7 +537,7 @@ class SymbolSetGeneratorTest {
         val file = generator.generateSwiftEnumFile(listOf("HomeOutlined"), tempDir)
         val content = file.readText()
 
-        // 1 / (1.7 × 0.7 × 1.0) ≈ 0.84 — the box→font multiplier for default scaling.
+        // 1 / (1.7 × 0.7 × 1.0) ≈ 0.84 — the box->font multiplier for default scaling.
         assertTrue(content.contains("static var pointScale: CGFloat { 0.8403361344537815 }"))
         assertTrue(content.contains("func image(boxSize: CGFloat) -> some View"))
         assertTrue(content.contains(".font(.system(size: boxSize * GeneratedSymbol.pointScale))"))

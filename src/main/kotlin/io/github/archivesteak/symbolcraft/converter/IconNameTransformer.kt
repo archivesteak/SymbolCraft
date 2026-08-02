@@ -49,25 +49,25 @@ abstract class IconNameTransformer : Serializable {
 
 /** Naming conventions for icon class names. */
 enum class NamingConvention {
-    /** PascalCase: home-icon → HomeIcon */
+    /** PascalCase: home-icon -> HomeIcon */
     PASCAL_CASE,
 
-    /** camelCase: home-icon → homeIcon */
+    /** camelCase: home-icon -> homeIcon */
     CAMEL_CASE,
 
-    /** snake_case: home-icon → home_icon */
+    /** snake_case: home-icon -> home_icon */
     SNAKE_CASE,
 
-    /** SCREAMING_SNAKE_CASE: home-icon → HOME_ICON */
+    /** SCREAMING_SNAKE_CASE: home-icon -> HOME_ICON */
     SCREAMING_SNAKE,
 
-    /** kebab-case: home_icon → home-icon */
+    /** kebab-case: home_icon -> home-icon */
     KEBAB_CASE,
 
-    /** lowercase: HomeIcon → homeicon */
+    /** lowercase: HomeIcon -> homeicon */
     LOWER_CASE,
 
-    /** UPPERCASE: HomeIcon → HOMEICON */
+    /** UPPERCASE: HomeIcon -> HOMEICON */
     UPPER_CASE,
 }
 
@@ -82,7 +82,7 @@ enum class NamingConvention {
  *     convention = NamingConvention.PASCAL_CASE,
  *     suffix = "Icon"
  * )
- * transformer.transform("arrow-left") // → "ArrowLeftIcon"
+ * transformer.transform("arrow-left") // -> "ArrowLeftIcon"
  * ```
  *
  * @property convention The naming convention to apply
@@ -115,8 +115,10 @@ class ConventionNameTransformer(
                 NamingConvention.SNAKE_CASE -> toSnakeCase(cleaned, uppercase = false)
                 NamingConvention.SCREAMING_SNAKE -> toSnakeCase(cleaned, uppercase = true)
                 NamingConvention.KEBAB_CASE -> toKebabCase(cleaned)
-                NamingConvention.LOWER_CASE -> cleaned.lowercase().replace(Regex("[^a-z0-9]"), "")
-                NamingConvention.UPPER_CASE -> cleaned.uppercase().replace(Regex("[^A-Z0-9]"), "")
+                NamingConvention.LOWER_CASE ->
+                    cleaned.lowercase().replace(NON_LOWER_ALNUM_REGEX, "")
+                NamingConvention.UPPER_CASE ->
+                    cleaned.uppercase().replace(NON_UPPER_ALNUM_REGEX, "")
             }
 
         return "$prefix$converted$suffix"
@@ -149,9 +151,9 @@ class ConventionNameTransformer(
     private fun splitWords(input: String): List<String> {
         // Split by common delimiters: -, _, space, and detect camelCase/PascalCase boundaries
         return input
-            .replace(Regex("([A-Z]+)([A-Z][a-z])"), "$1_$2")
-            .replace(Regex("([a-z\\d])([A-Z])"), "$1_$2")
-            .split(Regex("[\\s\\-_]+")) // Split by -, _, space
+            .replace(ACRONYM_BOUNDARY_REGEX, "$1_$2")
+            .replace(CAMEL_BOUNDARY_REGEX, "$1_$2")
+            .split(WORD_DELIMITER_REGEX)
             .filter { it.isNotBlank() }
     }
 
@@ -173,22 +175,17 @@ class ConventionNameTransformer(
 
     companion object {
         private const val serialVersionUID = 1L
+
+        private val ACRONYM_BOUNDARY_REGEX = Regex("([A-Z]+)([A-Z][a-z])")
+        private val CAMEL_BOUNDARY_REGEX = Regex("([a-z\\d])([A-Z])")
+        private val WORD_DELIMITER_REGEX = Regex("[\\s\\-_]+")
+        private val NON_LOWER_ALNUM_REGEX = Regex("[^a-z0-9]")
+        private val NON_UPPER_ALNUM_REGEX = Regex("[^A-Z0-9]")
     }
 }
 
 /** Factory for creating common name transformers. */
 object NameTransformerFactory {
-    /**
-     * Create a name transformer for a specific library.
-     *
-     * @param libraryId Unique identifier for the icon library
-     * @return Appropriate name transformer instance
-     */
-    fun create(libraryId: String): IconNameTransformer {
-        // This can be expanded with more cases for specific libraries in the future.
-        return pascalCase()
-    }
-
     /**
      * Create a transformer with PascalCase convention.
      *

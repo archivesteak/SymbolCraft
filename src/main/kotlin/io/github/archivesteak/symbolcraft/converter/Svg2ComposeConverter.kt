@@ -85,62 +85,6 @@ class Svg2ComposeConverter {
     }
 
     /**
-     * Convert a single SVG file to Compose code
-     *
-     * @param svgFile The SVG file to convert
-     * @param outputFile The output Kotlin file
-     * @param packageName Package name for the generated file
-     * @param iconName Name of the generated icon
-     */
-    fun convertSingleFile(svgFile: File, outputFile: File, packageName: String, iconName: String) {
-        if (!svgFile.exists() || !svgFile.isFile) {
-            throw IllegalArgumentException("SVG file does not exist: ${svgFile.absolutePath}")
-        }
-
-        // Create a temporary directory for single file conversion
-        val tempDir =
-            File(
-                System.getProperty("java.io.tmpdir"),
-                "svg2compose_temp_${System.currentTimeMillis()}",
-            )
-        tempDir.mkdirs()
-
-        try {
-            // Copy the SVG to temp directory
-            val tempSvgFile = File(tempDir, "${iconName}.svg")
-            svgFile.copyTo(tempSvgFile)
-
-            // Convert using directory method
-            val outputDir = outputFile.parentFile
-            outputDir.mkdirs()
-
-            Svg2Compose.parse(
-                applicationIconPackage = packageName,
-                accessorName = iconName,
-                outputSourceDirectory = outputDir,
-                vectorsDirectory = tempDir,
-                type = VectorType.SVG,
-                allAssetsPropertyName = "AllIcons", // Set a default name
-            )
-
-            // Rename the generated file if needed
-            val generatedFile = File(outputDir, "$packageName/$iconName.kt")
-            if (generatedFile.exists() && generatedFile.absolutePath != outputFile.absolutePath) {
-                generatedFile.renameTo(outputFile)
-            }
-        } finally {
-            // Clean up temp directory
-            tempDir.deleteRecursively()
-        }
-    }
-
-    /** Check if the converter can process the given file */
-    fun canProcess(file: File): Boolean {
-        val extension = file.extension.lowercase()
-        return extension == "svg" || extension == "xml"
-    }
-
-    /**
      * Post-process generated files to ensure deterministic output This removes timestamps and other
      * non-deterministic content
      *
@@ -295,17 +239,10 @@ class Svg2ComposeConverter {
     /** Sort imports for deterministic order */
     private fun sortImportsIfNeeded(content: String): String {
         val lines = content.lines()
-        val packageLineIndex = lines.indexOfFirst { it.startsWith("package ") }
-        if (packageLineIndex == -1) return content
-
-        val importsStartIndex =
-            lines.indexOfFirst {
-                it.startsWith("import ") && it.indexOf("import ") >= packageLineIndex
-            }
+        val importsStartIndex = lines.indexOfFirst { it.startsWith("import ") }
         if (importsStartIndex == -1) return content
 
         val importsEndIndex = lines.indexOfLast { it.startsWith("import ") }
-        if (importsEndIndex == -1) return content
 
         val beforeImports = lines.subList(0, importsStartIndex)
         val imports = lines.subList(importsStartIndex, importsEndIndex + 1).sorted()

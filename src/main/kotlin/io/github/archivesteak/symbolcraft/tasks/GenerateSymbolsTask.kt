@@ -27,7 +27,7 @@ import org.gradle.api.tasks.TaskAction
  * 1. Materialise a [GenerationContext] describing the user DSL configuration and filesystem layout.
  * 2. Run pre-generation housekeeping so old Kotlin sources and obsolete cache entries disappear.
  * 3. Download (or copy) requested SVG assets in parallel, recording telemetry along the way.
- * 4. Invoke the SVG → Compose converter for each icon library and emit Kotlin sources.
+ * 4. Invoke the SVG -> Compose converter for each icon library and emit Kotlin sources.
  * 5. Report cache statistics and surface actionable guidance when failures occur.
  *
  * Each of those steps lives in its own collaborator under `tasks.internal`, which keeps this task
@@ -52,8 +52,6 @@ abstract class GenerateSymbolsTask : DefaultTask() {
 
     @get:Input abstract val cacheDirectory: Property<String>
 
-    @get:Input abstract val gradleUserHomeDir: Property<String>
-
     @get:Input abstract val projectBuildDir: Property<String>
 
     /**
@@ -68,7 +66,7 @@ abstract class GenerateSymbolsTask : DefaultTask() {
         logGenerationStart(context)
 
         val iconsByLibrary = IconLibraryClassifier.groupByLibrary(context.config)
-        logger.debug("📚 Libraries found: ${iconsByLibrary.keys.joinToString()}")
+        logger.debug("Libraries found: ${iconsByLibrary.keys.joinToString()}")
 
         val cleaner = PreGenerationCleaner(logger)
         cleaner.clean(context)
@@ -109,9 +107,9 @@ abstract class GenerateSymbolsTask : DefaultTask() {
     /** Emits a friendly banner describing how many icons will be processed in this build pass. */
     private fun logGenerationStart(context: GenerationContext) {
         val totalIcons = context.config.values.sumOf { it.size }
-        logger.lifecycle("🎨 Generating icons...")
-        logger.lifecycle("📊 Icons to generate: $totalIcons total")
-        logger.debug("📂 Cache directory: ${context.cacheBaseDir.absolutePath}")
+        logger.lifecycle("Generating icons...")
+        logger.lifecycle("Icons to generate: $totalIcons total")
+        logger.debug("Cache directory: ${context.cacheBaseDir.absolutePath}")
     }
 
     /**
@@ -137,7 +135,7 @@ abstract class GenerateSymbolsTask : DefaultTask() {
      * cache vs SVG parsing) saves them from scanning the entire stack trace.
      */
     private fun handleGenerationError(e: Exception): Nothing {
-        logger.error("❌ Generation failed: ${e.message}")
+        logger.error("Generation failed: ${e.message}")
         logger.error("   Stack trace: ${e.stackTraceToString()}")
 
         val guidance =
@@ -151,7 +149,7 @@ abstract class GenerateSymbolsTask : DefaultTask() {
                 else -> "Unexpected error. Please check configuration and try again."
             }
 
-        logger.error("   💡 $guidance")
+        logger.error("   Hint: $guidance")
         throw e
     }
 
@@ -164,7 +162,7 @@ abstract class GenerateSymbolsTask : DefaultTask() {
         try {
             downloader.cleanup()
         } catch (cleanupException: Exception) {
-            logger.warn("⚠️ Warning: Failed to cleanup downloader: ${cleanupException.message}")
+            logger.warn("Warning: Failed to cleanup downloader: ${cleanupException.message}")
         }
     }
 }
