@@ -73,13 +73,10 @@ jobs:
     - name: Make gradlew executable
       run: chmod +x ./gradlew
 
+    # NOTE: no signing/Maven Central env here — unset secrets render as empty
+    # strings and break the Gradle signing predicate on publishToMavenLocal.
     - name: Publish plugin to local repository
       run: ./gradlew publishToMavenLocal --stacktrace
-      env:
-        ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.OSSRH_USERNAME }}
-        ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.OSSRH_PASSWORD }}
-        ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
-        ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
 
     - name: Test example project
       working-directory: example
@@ -115,11 +112,6 @@ jobs:
       run: |
         ./gradlew tasks --all | grep -i symbolcraft || echo "No SymbolCraft tasks found yet"
         ./gradlew publishToMavenLocal --stacktrace
-      env:
-        ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.OSSRH_USERNAME }}
-        ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.OSSRH_PASSWORD }}
-        ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
-        ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
 
     - name: Verify plugin publication
       run: |
@@ -182,11 +174,6 @@ jobs:
 
     - name: Build release artifacts
       run: ./gradlew build publishToMavenLocal --stacktrace
-      env:
-        ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.OSSRH_USERNAME }}
-        ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.OSSRH_PASSWORD }}
-        ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
-        ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
 
     - name: List build artifacts
       run: |
