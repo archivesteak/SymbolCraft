@@ -4,7 +4,7 @@
 
 **SymbolCraft** is a Gradle plugin for Kotlin Multiplatform projects that generates icons on-demand from multiple icon libraries (Material Symbols, Bootstrap Icons, Heroicons, etc.).
 
-- **Version**: v0.6.1
+- **Version**: v0.6.2
 - **Status**: ✅ Published to GitHub Packages (fork of [kingsword09/SymbolCraft](https://github.com/kingsword09/SymbolCraft), not on Maven Central / Plugin Portal)
 - **Language**: Kotlin 2.0.0
 - **Minimum Gradle version**: 8.0+
@@ -316,7 +316,7 @@ abstract class IconNameTransformer {
 ### 9. **SwiftUI output (.symbolset / custom SF Symbols)**
 
 **Components**:
-- `plugin/SwiftUIConfig.kt` - `swiftUI { }` DSL configuration (enabled, outputDirectory, scaleFactor, generateSwiftEnum; disabled by default)
+- `plugin/SwiftUIConfig.kt` - `swiftUI { }` DSL configuration (enabled, outputDirectory, scaleFactor, generateSwiftEnum, swiftSourceOutputDirectory; disabled by default). When `outputDirectory` ends in `.xcassets`, `Symbols.swift` is redirected to the catalog's parent directory (Xcode treats asset catalogs as leaves — sources inside them never compile); `swiftSourceOutputDirectory` overrides the location explicitly.
 - `converter/SymbolSetGenerator.kt` - Pure Kotlin generator (no Gradle types, unit-testable)
 - `tasks/internal/SymbolSetGenerationCoordinator.kt` - Pipeline collaborator; reuses the download phase's temp SVGs, so no extra downloads are triggered
 
@@ -719,7 +719,11 @@ docs(readme): update installation guide
 
 ## Changelog
 
-### v0.6.1 (latest)
+### v0.6.2 (latest)
+- 🍏 **`.xcassets`-compatible Swift sources**: new optional `swiftSourceOutputDirectory` DSL property. When `swiftUI.outputDirectory` points at an Xcode asset catalog (so `.symbolset` bundles compile via a synchronized group without the manual drag-in step), `Symbols.swift` is now written to the catalog's parent directory instead of inside it — Xcode treats catalogs as leaves, so Swift sources inside `.xcassets` were invisible to the compiler, making `generateSwiftEnum` and catalog output mutually exclusive. Stale in-catalog `Symbols.swift` copies are removed by the pre-generation cleaner.
+- 🧪 **Tests**: new `SwiftUISourceDirResolutionTest` (5 cases: plain folder, `.xcassets` redirect, relative/absolute override, blank fallback).
+
+### v0.6.1
 - 🔧 **Compile-task wiring fix**: generation is now wired into every `KotlinCompileTool` task by type (loaded reflectively), fixing builds where the Kotlin compile task name contains no "Kotlin" — e.g. AGP 9.x built-in Kotlin / KMP modules (`compileAndroidMain`), which previously failed with "uses this output of task ':generateSymbolCraftIcons' without declaring a dependency".
 - 📐 **SwiftUI fixed-size helper**: generated `Symbols.swift` now includes `GeneratedSymbol.pointScale` (= 1 / (1.7 × 0.7 × scaleFactor)) and `image(boxSize:)`, so a symbol can be rendered in an exact point box (e.g. `GeneratedSymbol.homeOutlined.image(boxSize: 24)`) instead of only sizing by font.
 - 🧪 **Tests**: 2 new `SymbolSetGeneratorTest` cases (pointScale value, scaleFactor baking).

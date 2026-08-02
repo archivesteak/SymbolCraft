@@ -26,18 +26,25 @@ import org.gradle.api.provider.Property
  *   Increase to make symbols appear larger relative to text.
  * @property generateSwiftEnum toggles generation of the `Symbols.swift` helper enum (default:
  *   true).
+ * @property swiftSourceOutputDirectory directory where `Symbols.swift` is written (optional). When
+ *   unset: if [outputDirectory] ends in `.xcassets`, the catalog's PARENT directory is used (Xcode
+ *   treats asset catalogs as leaves — sources inside them are invisible to the Swift compiler, and
+ *   synchronized file-system groups never descend into `.xcassets`); otherwise `Symbols.swift` is
+ *   written next to the `.symbolset` bundles as before.
  */
 abstract class SwiftUIConfig {
     abstract val enabled: Property<Boolean>
     abstract val outputDirectory: Property<String>
     abstract val scaleFactor: Property<Double>
     abstract val generateSwiftEnum: Property<Boolean>
+    abstract val swiftSourceOutputDirectory: Property<String>
 
     init {
         enabled.convention(false)
         outputDirectory.convention("build/generated/symbolcraft/swiftui")
         scaleFactor.convention(1.0)
         generateSwiftEnum.convention(true)
+        // No convention: unset means "derive from outputDirectory" (see KDoc above).
     }
 
     /** Stable signature used in the Gradle up-to-date / build-cache key. */
@@ -46,7 +53,8 @@ abstract class SwiftUIConfig {
             "enabled=${enabled.orNull}," +
             "outputDirectory='${outputDirectory.orNull}'," +
             "scaleFactor=${scaleFactor.orNull}," +
-            "generateSwiftEnum=${generateSwiftEnum.orNull}" +
+            "generateSwiftEnum=${generateSwiftEnum.orNull}," +
+            "swiftSourceOutputDirectory='${swiftSourceOutputDirectory.orNull}'" +
             ")"
     }
 }

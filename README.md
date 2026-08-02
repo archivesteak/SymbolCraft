@@ -306,7 +306,18 @@ symbolCraft {
         outputDirectory.set("iosApp/GeneratedSymbols")       // Default: build/generated/symbolcraft/swiftui
         scaleFactor.set(1.0)                                 // Default: 1.0 - symbol size relative to text
         generateSwiftEnum.set(true)                          // Default: true - emit Symbols.swift helper
+        // swiftSourceOutputDirectory.set("iosApp/Sources/Generated")  // Optional: where Symbols.swift lands
     }
+}
+```
+
+**Pointing `outputDirectory` at your `.xcassets`** (recommended — the `.symbolset` bundles then compile automatically via a synchronized group, no manual drag-into-Xcode step): Xcode treats an asset catalog as a leaf, so Swift sources inside it are invisible to the compiler. SymbolCraft handles this: when `outputDirectory` ends in `.xcassets`, `Symbols.swift` is automatically written to the catalog's **parent** directory instead of inside it. Set `swiftSourceOutputDirectory` to override the location entirely.
+
+```kotlin
+swiftUI {
+    enabled.set(true)
+    outputDirectory.set("iosApp/Assets.xcassets")   // bundles compile via synchronized group
+    // Symbols.swift lands in iosApp/ — add it to your app target once
 }
 ```
 
@@ -320,6 +331,7 @@ iosApp/GeneratedSymbols/
 ├── SearchRounded.symbolset/
 │   └── ...
 └── Symbols.swift                  # GeneratedSymbol enum + Image convenience init
+                                   # (written to the parent dir when outputDirectory is an .xcassets)
 ```
 
 Material Symbols **weights map to real SF Symbol weight columns** (W400→Regular, W500→Medium, W700→Bold, …): `materialSymbol("home") { weights(400, 500, 700) }` produces a single `HomeOutlined.symbolset` whose Regular/Medium/Bold variants use the genuine per-weight outlines downloaded from Google Fonts. Variants (outlined/rounded/sharp) and fill states are distinct glyphs, so each gets its own symbol set. Weights/scales you did not configure are derived using Apple's relative sizing, so every symbol set contains the full 27-variant grid Xcode expects. External and local icons become single-`Regular` symbol sets.
