@@ -164,7 +164,7 @@ constructor(private val layout: ProjectLayout, private val objects: ObjectFactor
     fun materialSymbol(name: String, configure: MaterialSymbolsBuilder.() -> Unit) {
         val builder = MaterialSymbolsBuilder()
         builder.configure()
-        builder.configs.forEach { config -> iconConfig(name, config) }
+        builder.effectiveConfigs().forEach { config -> iconConfig(name, config) }
     }
 
     /**
@@ -306,14 +306,17 @@ constructor(private val layout: ProjectLayout, private val objects: ObjectFactor
      */
     fun getConfigHash(): String {
         val configString = buildString {
-            append("version:3.0|")
+            append("version:4.0|")
 
             append("icons:")
             iconsConfig.toSortedMap().forEach { (name, configs) ->
                 append("$name-[")
                 configs
                     .sortedBy { "${it.libraryId}-${it.getSignature()}" }
-                    .forEach { config -> append("${config.libraryId}:${config.getSignature()},") }
+                    .forEach { config ->
+                        val targets = config.targets.sortedBy { it.name }.joinToString("+")
+                        append("${config.libraryId}:${config.getSignature()}:$targets,")
+                    }
                 append("]")
             }
             append("|package:").append(packageName.orNull)
@@ -333,6 +336,30 @@ constructor(private val layout: ProjectLayout, private val objects: ObjectFactor
 /** Builder for Material Symbols configuration. */
 class MaterialSymbolsBuilder {
     val configs = mutableListOf<MaterialSymbolsConfig>()
+
+    /**
+     * Platforms the configured icons are generated for. Defaults to [IconTargets.ALL]; applied to
+     * every style when the builder finishes, so it can be set before or after [style] calls.
+     */
+    var targets: Set<IconTarget> = IconTargets.ALL
+
+    /**
+     * Generate these icons only as SwiftUI `.symbolset` bundles — no Compose sources are emitted.
+     *
+     * Use for Apple-only concepts (e.g. `airplay`) that would just pollute the common source set.
+     */
+    fun swiftUIOnly() {
+        targets = IconTargets.SWIFTUI_ONLY
+    }
+
+    /** Generate these icons only as Compose sources — no `.symbolset` bundles are emitted. */
+    fun composeOnly() {
+        targets = IconTargets.COMPOSE_ONLY
+    }
+
+    /** All configured styles with [targets] applied. */
+    internal fun effectiveConfigs(): List<MaterialSymbolsConfig> =
+        configs.map { it.copy(targets = targets) }
 
     /** Add a single style configuration using SymbolWeight enum. */
     fun style(
@@ -429,6 +456,26 @@ class ExternalIconBuilder(private val libraryName: String) {
     private val multiValueParams = mutableMapOf<String, List<String>>()
 
     /**
+     * Platforms the configured icons are generated for. Defaults to [IconTargets.ALL]; applied to
+     * every style-parameter combination when the builder finishes.
+     */
+    var targets: Set<IconTarget> = IconTargets.ALL
+
+    /**
+     * Generate these icons only as SwiftUI `.symbolset` bundles — no Compose sources are emitted.
+     *
+     * Use for Apple-only concepts that would just pollute the common source set.
+     */
+    fun swiftUIOnly() {
+        targets = IconTargets.SWIFTUI_ONLY
+    }
+
+    /** Generate these icons only as Compose sources — no `.symbolset` bundles are emitted. */
+    fun composeOnly() {
+        targets = IconTargets.COMPOSE_ONLY
+    }
+
+    /**
      * Add a single-value style parameter for URL template replacement.
      *
      * @param key Parameter name (used as {key} in template)
@@ -462,12 +509,14 @@ class ExternalIconBuilder(private val libraryName: String) {
 
         // If no multi-value params, return single config (backward compatibility)
         if (multiValueParams.isEmpty()) {
-            return listOf(ExternalIconConfig(libraryName, urlTemplate, singleValueParams.toMap()))
+            return listOf(
+                ExternalIconConfig(libraryName, urlTemplate, singleValueParams.toMap(), targets)
+            )
         }
 
         // Generate Cartesian product of all parameter combinations
         return generateCartesianProduct().map { paramCombination ->
-            ExternalIconConfig(libraryName, urlTemplate, paramCombination)
+            ExternalIconConfig(libraryName, urlTemplate, paramCombination, targets)
         }
     }
 
@@ -501,6 +550,25 @@ class LocalIconsBuilder internal constructor(private val projectDir: String) {
      * absolute paths or paths relative to the Gradle project directory.
      */
     var directory: String? = null
+
+    /**
+     * Platforms the discovered icons are generated for. Defaults to [IconTargets.ALL]; applied to
+     * every discovered icon when the builder finishes.
+     */
+    var targets: Set<IconTarget> = IconTargets.ALL
+
+    /**
+     * Generate the discovered icons only as SwiftUI `.symbolset` bundles — no Compose sources are
+     * emitted.
+     */
+    fun swiftUIOnly() {
+        targets = IconTargets.SWIFTUI_ONLY
+    }
+
+    /** Generate the discovered icons only as Compose sources — no `.symbolset` bundles. */
+    fun composeOnly() {
+        targets = IconTargets.COMPOSE_ONLY
+    }
 
     private val includePatterns = mutableListOf<String>()
     private val excludePatterns = mutableListOf<String>()
@@ -579,6 +647,7 @@ class LocalIconsBuilder internal constructor(private val projectDir: String) {
                         libraryName = libraryName,
                         absolutePath = file.absolutePath,
                         relativePath = relativeWithoutExt,
+                        targets = targets,
                     )
             }
 

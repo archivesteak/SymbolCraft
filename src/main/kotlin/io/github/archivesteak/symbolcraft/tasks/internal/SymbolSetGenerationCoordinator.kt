@@ -2,6 +2,7 @@ package io.github.archivesteak.symbolcraft.tasks.internal
 
 import io.github.archivesteak.symbolcraft.converter.NameTransformerFactory
 import io.github.archivesteak.symbolcraft.converter.SymbolSetGenerator
+import io.github.archivesteak.symbolcraft.model.IconTarget
 import java.io.File
 import org.gradle.api.logging.Logger
 
@@ -56,9 +57,16 @@ internal class SymbolSetGenerationCoordinator(private val logger: Logger) {
             val libraryConfigs =
                 context.config
                     .mapValues { (_, iconConfigs) ->
-                        iconConfigs.filter { it.libraryId == libraryId }
+                        iconConfigs.filter {
+                            it.libraryId == libraryId && IconTarget.SWIFTUI in it.targets
+                        }
                     }
                     .filterValues { it.isNotEmpty() }
+
+            if (libraryConfigs.isEmpty()) {
+                logger.debug("   Skipping library $libraryId for SwiftUI: no SWIFTUI targets")
+                return@forEach
+            }
 
             try {
                 val results =

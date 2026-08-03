@@ -16,7 +16,7 @@ This example showcases:
 
 ## Version Baseline
 
-- **SymbolCraft**: 0.6.5
+- **SymbolCraft**: 0.7.0
 - **Compose Multiplatform**: 1.11.1
 - **Kotlin**: 2.3.21
 - **Preview annotation**: `androidx.compose.ui.tooling.preview.Preview`

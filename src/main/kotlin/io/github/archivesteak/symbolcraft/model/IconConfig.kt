@@ -45,6 +45,33 @@ private fun stableShortHash(input: String): String {
 }
 
 /**
+ * Output platform an icon can be generated for.
+ *
+ * Some icons only make sense on one platform — for example `airplay` is an Apple-only concept, so
+ * emitting a Compose `ImageVector` for it just pollutes the common source set. Marking such icons
+ * [SWIFTUI] keeps them out of the Kotlin sources (and vice versa).
+ */
+enum class IconTarget {
+    /** Compose Multiplatform `ImageVector` Kotlin sources. */
+    COMPOSE,
+
+    /** SwiftUI custom SF Symbol `.symbolset` bundles (plus `Symbols.swift`). */
+    SWIFTUI,
+}
+
+/** Common [IconTarget] combinations. */
+object IconTargets {
+    /** Generate for every platform (default). */
+    val ALL: Set<IconTarget> = setOf(IconTarget.COMPOSE, IconTarget.SWIFTUI)
+
+    /** Compose sources only; no `.symbolset` is emitted. */
+    val COMPOSE_ONLY: Set<IconTarget> = setOf(IconTarget.COMPOSE)
+
+    /** SwiftUI `.symbolset` only; no Compose source is emitted. */
+    val SWIFTUI_ONLY: Set<IconTarget> = setOf(IconTarget.SWIFTUI)
+}
+
+/**
  * Base interface for all icon library configurations.
  *
  * Users can implement this interface to support custom icon libraries.
@@ -105,6 +132,14 @@ interface IconConfig {
      * @return Signature string for file naming
      */
     fun getSignature(): String
+
+    /**
+     * Platforms this icon is generated for. Defaults to [IconTargets.ALL]; custom implementations
+     * can override this (or use the `swiftUIOnly()`/`composeOnly()` builder DSL) to keep
+     * platform-specific icons out of the other platform's output.
+     */
+    val targets: Set<IconTarget>
+        get() = IconTargets.ALL
 }
 
 /**
@@ -115,11 +150,13 @@ interface IconConfig {
  * @property libraryName Logical grouping name used for output folder segmentation.
  * @property absolutePath Fully resolved path to the SVG file on disk.
  * @property relativePath Relative path (without extension) inside the configured local directory.
+ * @property targets Platforms this icon is generated for (default: all).
  */
 data class LocalIconConfig(
     val libraryName: String,
     val absolutePath: String,
     val relativePath: String,
+    override val targets: Set<IconTarget> = IconTargets.ALL,
 ) : IconConfig {
 
     override val libraryId: String = libraryName
@@ -176,6 +213,7 @@ data class LocalIconConfig(
  * @property fill Fill mode (filled or unfilled)
  * @property grade Fine-tuning parameter for weight adjustment
  * @property opticalSize Optical size optimization parameter
+ * @property targets Platforms this icon is generated for (default: all)
  */
 data class MaterialSymbolsConfig(
     val weight: SymbolWeight = SymbolWeight.W400,
@@ -183,6 +221,7 @@ data class MaterialSymbolsConfig(
     val fill: SymbolFill = SymbolFill.UNFILLED,
     val grade: Int = 0,
     val opticalSize: Int = 24,
+    override val targets: Set<IconTarget> = IconTargets.ALL,
 ) : IconConfig {
     override val libraryId = "material-symbols"
 
@@ -232,11 +271,13 @@ data class MaterialSymbolsConfig(
  * @property libraryName Name of the external library (will be prefixed with "external-")
  * @property urlTemplate URL pattern with placeholders (must be full URL)
  * @property styleParams Map of style parameters for placeholder replacement
+ * @property targets Platforms this icon is generated for (default: all)
  */
 data class ExternalIconConfig(
     val libraryName: String,
     val urlTemplate: String,
     val styleParams: Map<String, String> = emptyMap(),
+    override val targets: Set<IconTarget> = IconTargets.ALL,
 ) : IconConfig {
     init {
         // Validate URL template format and security

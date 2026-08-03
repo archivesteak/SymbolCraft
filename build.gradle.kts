@@ -13,7 +13,7 @@ plugins {
 
 group = "io.github.archivesteak"
 
-version = "0.6.5"
+version = "0.7.0"
 
 kotlin { jvmToolchain(17) }
 

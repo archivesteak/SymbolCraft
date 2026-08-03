@@ -4,7 +4,7 @@
 
 **SymbolCraft** is a Gradle plugin for Kotlin Multiplatform projects that generates icons on-demand from multiple icon libraries (Material Symbols, Bootstrap Icons, Heroicons, etc.).
 
-- **Version**: v0.6.5
+- **Version**: v0.7.0
 - **Status**: Published to GitHub Packages (fork of [kingsword09/SymbolCraft](https://github.com/kingsword09/SymbolCraft), not on Maven Central / Plugin Portal)
 - **Language**: Kotlin 2.0.0
 - **Minimum Gradle version**: 8.0+
@@ -14,6 +14,7 @@
 
 - **Multiple icon libraries** - Material Symbols, Bootstrap Icons, Heroicons, custom URL templates
 - **SwiftUI output** - Generate custom SF Symbol `.symbolset` bundles from the same SVGs (real per-weight glyphs mapped to SF weight columns)
+- **Per-icon platform targeting** - `swiftUIOnly()` / `composeOnly()` per icon declaration, keeping Apple-only icons (e.g. `airplay`) out of Compose sources and vice versa
 - **Smart caching** - 7-day SVG cache, supports relative/absolute paths
 - **Parallel downloads** - Kotlin coroutines with configurable retry mechanism
 - **Deterministic builds** - Git-friendly deterministic code generation
@@ -165,6 +166,9 @@ class SymbolCraftPlugin : Plugin<Project> {
   - `localIcons()` - Configure checked-in local SVG files
   - `swiftUI {}` - Configure SwiftUI `.symbolset` output (see component 9)
   - `naming {}` - Configure naming rules
+- Every icon builder also supports **per-icon platform targeting**: `swiftUIOnly()` / `composeOnly()`
+  (or a `targets: Set<IconTarget>` property). Applied to all styles of that builder at build time, so
+  call order does not matter. Default is `IconTargets.ALL` (both platforms).
 
 **Configuration options**:
 ```kotlin
@@ -275,8 +279,13 @@ interface IconConfig {
     fun buildUrl(iconName: String): String
     fun getCacheKey(iconName: String): String
     fun getSignature(): String
+    val targets: Set<IconTarget>  // defaults to IconTargets.ALL
 }
 ```
+
+`targets` routes the icon: COMPOSE-targeted configs reach the SVG -> Compose conversion (excluded
+configs are staged out of the converter's input directory), SWIFTUI-targeted configs reach the
+`.symbolset` generator. Downloads always fetch everything either platform needs.
 
 ---
 
@@ -477,8 +486,9 @@ cacheDirectory.set("""C:\Temp\SymbolCraft""")
 - `GenerateSymbolsTaskTest` - TestKit integration tests
 - `SymbolSetGeneratorTest` - `.symbolset` generation (30 cases: template structure, guide constants, geometry centering, weight mapping, determinism, name sanitization, Swift enum emission, fill-rule preservation, scaleFactor validation, duplicate-name handling)
 - `SwiftUISourceDirResolutionTest` - `Symbols.swift` placement rules (8 cases: plain folder, `.xcassets` root/child/uppercase/exact-name redirect, relative/absolute override, blank fallback)
+- `IconTargetsDslTest` - Per-icon platform targeting DSL (6 cases: defaults, call-order independence, all three builders, custom `IconConfig` default)
 
-All suites are green on Windows and Linux (81 tests). The local-icons glob bug that made
+All suites are green on Windows and Linux (88 tests). The local-icons glob bug that made
 `LocalIconsBuilderTest`/`GenerateSymbolsTaskTest` fail on Windows was fixed in v0.6.4 — Java glob
 patterns use `/` on every platform, and converting to `File.separator` turned the separator into a
 glob escape character on Windows.
@@ -746,7 +756,14 @@ docs(readme): update installation guide
 
 ## Changelog
 
-### v0.6.5 (latest)
+### v0.7.0 (latest)
+- **Per-icon platform targeting**: new `swiftUIOnly()` / `composeOnly()` DSL on all three icon builders (plus a `targets: Set<IconTarget>` property and an `IconConfig.targets` interface member defaulting to `IconTargets.ALL`). Apple-only icons like `airplay` can now be emitted as `.symbolset` bundles without polluting the Compose source set, and vice versa. Applied at builder completion, so call order does not matter; the config hash includes targets so toggling invalidates the task correctly.
+- **Pipeline routing**: the Compose converter consumes a whole directory, so when filtering is active the COMPOSE-targeted SVGs are staged into a sibling temp dir (zero copies in the default all-allowed case); the `.symbolset` phase simply filters configs by target. Downloads always fetch whatever either platform needs, and the pre-generation cleaner removes stale output when an icon's target changes.
+- **No-output warnings**: `generateSymbolCraftIcons` and `validateSymbolCraftConfig` warn when icons target SwiftUI only while SwiftUI output is disabled (they would generate nothing).
+- **Tests**: new `IconTargetsDslTest` (6 cases) and a TestKit integration test asserting a `swiftUIOnly` Material Symbol emits a symbol set + `Symbols.swift` case but no Kotlin source (and the reverse for `composeOnly`). 88 tests total.
+- **Example**: demonstrates `materialSymbol("airplay") { style(); swiftUIOnly() }`.
+
+### v0.6.5
 - **Local-SVG staleness bug fixed**: the contents of every `localIcons { }` SVG are now declared `@InputFiles` on `generateSymbolCraftIcons` — editing a checked-in SVG used to leave the task UP-TO-DATE with stale generated code. Guarded by a new TestKit regression test (edit file -> task re-runs).
 - **Generated-file delete guard**: every generated `.kt` file now starts with a `// Generated by SymbolCraft` header (the same marker `Symbols.swift` already had), and both the pre-generation cleaner and `cleanSymbolCraftIcons` refuse to delete Kotlin files without it — hand-written sources under the icons directory can no longer be destroyed. Note: files generated by 0.6.4 or earlier lack the header, so orphans from *removed* icons produced by older versions must be deleted by hand once.
 - **Phantom serialization dependency removed**: `@Serializable` annotations and the kotlinx-serialization plugin/dependency were dead weight — no `Json.` usage existed anywhere. Both are gone, shrinking the published POM.

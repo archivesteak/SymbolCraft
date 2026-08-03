@@ -319,6 +319,82 @@ class GenerateSymbolsTaskTest {
         assertEquals(TaskOutcome.SUCCESS, thirdRun.task(":generateSymbolCraftIcons")?.outcome)
     }
 
+    @Test
+    fun `platform targets route icons to compose or swiftui only`() {
+        createSettings("symbolcraft-targets")
+        createBuildScript(
+            """
+                cacheEnabled.set(true)
+                cacheDirectory.set("symbolcraft-cache")
+                swiftUI {
+                    enabled.set(true)
+                    outputDirectory.set("build/generated/symbolsets")
+                    generateSwiftEnum.set(true)
+                }
+                localIcons(libraryName = "brand") {
+                    directory = "src/icons"
+                }
+                materialSymbol("home") {
+                    style()
+                    composeOnly()
+                }
+                materialSymbol("airplay") {
+                    style()
+                    swiftUIOnly()
+                }
+            """
+                .trimIndent()
+        )
+
+        writeSvg("src/icons/brand/logo.svg")
+        seedMaterialSymbolsCache(iconName = "home")
+        seedMaterialSymbolsCache(iconName = "airplay")
+
+        val result = runGradle("generateSymbolCraftIcons")
+        assertEquals(TaskOutcome.SUCCESS, result.task(":generateSymbolCraftIcons")?.outcome)
+
+        val kotlinFiles =
+            generatedDir("icons/materialsymbols")
+                .toFile()
+                .walkTopDown()
+                .filter { it.isFile && it.extension == "kt" }
+                .map { it.name }
+        assertTrue(
+            kotlinFiles.any { it.startsWith("Home") },
+            "composeOnly icon must emit Compose sources: $kotlinFiles",
+        )
+        assertTrue(
+            kotlinFiles.none { it.startsWith("Airplay") },
+            "swiftUIOnly icon must not emit Compose sources: $kotlinFiles",
+        )
+
+        val symbolSets =
+            projectDir
+                .resolve("build/generated/symbolsets")
+                .toFile()
+                .listFiles()
+                ?.filter { it.isDirectory }
+                ?.map { it.name }
+                .orEmpty()
+        assertTrue(
+            "AirplayOutlined.symbolset" in symbolSets,
+            "swiftUIOnly icon must emit a symbol set: $symbolSets",
+        )
+        assertTrue(
+            symbolSets.none { it.startsWith("Home") },
+            "composeOnly icon must not emit a symbol set: $symbolSets",
+        )
+        assertTrue(
+            symbolSets.any { it.startsWith("BrandLogo") },
+            "default targets emit both platforms: $symbolSets",
+        )
+
+        val swiftSource =
+            projectDir.resolve("build/generated/symbolsets/Symbols.swift").toFile().readText()
+        assertTrue(swiftSource.contains("airplayOutlined"), swiftSource)
+        assertTrue(!swiftSource.contains("homeOutlined"), swiftSource)
+    }
+
     private fun createSettings(projectName: String) {
         writeProjectFile("settings.gradle.kts", """rootProject.name = "$projectName"""")
     }

@@ -5,6 +5,7 @@ import SwiftUI
 public enum GeneratedSymbol: String, CaseIterable {
     case abTestingMdi = "AbTestingMdi"
     case abacusMdi = "AbacusMdi"
+    case airplayOutlined = "AirplayOutlined"
     case arrowBackFill = "ArrowBackFill"
     case arrowBackOfficial = "ArrowBackOfficial"
     case githubSimpleIcons = "GithubSimpleIcons"

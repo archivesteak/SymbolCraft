@@ -128,6 +128,13 @@ symbolCraft {
         style(weight = 500, variant = SymbolVariant.ROUNDED, fill = SymbolFill.FILLED)
     }
 
+    // Apple-only icon: emitted as a .symbolset for SwiftUI, but NOT as Compose sources
+    // (no point shipping an AirPlay ImageVector to Android/Desktop).
+    materialSymbol("airplay") {
+        style(weight = 400, variant = SymbolVariant.OUTLINED)
+        swiftUIOnly()
+    }
+
     // External icons with URL template
     externalIcons(*listOf("abacus", "ab-testing").toTypedArray(), libraryName = "mdi") {
         urlTemplate = "https://esm.sh/@mdi/svg@latest/svg/{name}.svg"

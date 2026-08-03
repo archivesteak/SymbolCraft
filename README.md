@@ -12,6 +12,7 @@ A Gradle plugin for Kotlin Multiplatform projects that generates icons on demand
 - Flexible naming: PascalCase, camelCase, snake_case, kebab-case, custom transformers
 - Compose Preview generation (configurable annotation class)
 - SwiftUI output: custom SF Symbols with real per-weight glyphs mapped to SF weight columns, plus a `Symbols.swift` helper enum
+- Per-icon platform targeting: `swiftUIOnly()` / `composeOnly()` keep platform-specific icons out of the other platform's output
 - Gradle task cache and configuration-cache compatible; wires itself ahead of Kotlin compilation
 - Local SVG support: convert checked-in SVGs with glob include/exclude patterns
 
@@ -50,7 +51,7 @@ Transitive dependencies (e.g. `svg-to-compose`) resolve from `mavenCentral()`, s
 ```toml
 # libs.versions.toml
 [plugins]
-symbolCraft = { id = "io.github.archivesteak.symbolcraft", version = "0.6.5" }
+symbolCraft = { id = "io.github.archivesteak.symbolcraft", version = "0.7.0" }
 ```
 
 ```kotlin
@@ -190,6 +191,24 @@ GeneratedSymbol.homeOutlined.image(boxSize: 24) // exact 24x24 pt box
 ```
 
 `.symbolset` glyphs size by font, not by box. The generated `Symbols.swift` exposes `GeneratedSymbol.pointScale` (= 1 / (1.7 × 0.7 × scaleFactor)) and the `image(boxSize:)` helper to convert an artwork box to the right font size.
+
+## Per-icon platform targeting
+
+Some icons only make sense on one platform — `airplay` is an Apple-only concept, so a Compose `ImageVector` for it would just pollute the common source set. Every builder supports `swiftUIOnly()` and `composeOnly()`:
+
+```kotlin
+materialSymbol("airplay") {
+    style(weight = 400)
+    swiftUIOnly()   // .symbolset only — no Kotlin source is generated
+}
+
+materialSymbol("home") {
+    style(weight = 400)
+    composeOnly()   // Kotlin source only — no .symbolset
+}
+```
+
+Works on `materialSymbol`, `externalIcon(s)`, and `localIcons`. The default is both platforms. An icon marked `swiftUIOnly()` while SwiftUI output is disabled generates nothing — the build logs a warning listing such icons.
 
 ## Gradle tasks
 

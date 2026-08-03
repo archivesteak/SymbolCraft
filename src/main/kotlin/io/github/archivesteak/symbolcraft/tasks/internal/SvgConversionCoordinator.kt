@@ -2,6 +2,9 @@ package io.github.archivesteak.symbolcraft.tasks.internal
 
 import io.github.archivesteak.symbolcraft.converter.NameTransformerFactory
 import io.github.archivesteak.symbolcraft.converter.Svg2ComposeConverter
+import io.github.archivesteak.symbolcraft.model.IconTarget
+import io.github.archivesteak.symbolcraft.model.tempSvgFileName
+import java.io.File
 import org.gradle.api.logging.Logger
 
 /**
@@ -32,6 +35,43 @@ internal class SvgConversionCoordinator(
                 logger.warn("No SVG files found for library: $libraryId")
                 return@forEach
             }
+
+            // Icons that do not target Compose (e.g. swiftUIOnly) must not reach the converter.
+            // The converter consumes a whole directory, so when filtering is active the allowed
+            // SVGs are staged into a sibling directory; the common all-allowed case converts the
+            // download directory in place with zero copies.
+            val composeFileNames =
+                context.config
+                    .flatMap { (iconName, configs) ->
+                        configs
+                            .filter {
+                                it.libraryId == libraryId && IconTarget.COMPOSE in it.targets
+                            }
+                            .map { tempSvgFileName(iconName, it) }
+                    }
+                    .toSet()
+
+            if (composeFileNames.isEmpty()) {
+                logger.lifecycle("   Skipping library $libraryId for Compose: no COMPOSE targets")
+                return@forEach
+            }
+
+            val conversionDir =
+                if (libraryTempDir.listFiles()?.all { it.name in composeFileNames } == true) {
+                    libraryTempDir
+                } else {
+                    val staging = context.tempDir.resolve("$libraryId-compose")
+                    staging.deleteRecursively()
+                    staging.mkdirs()
+                    libraryTempDir
+                        .listFiles()
+                        ?.filter { it.isFile && it.name in composeFileNames }
+                        ?.forEach { it.copyTo(File(staging, it.name), overwrite = true) }
+                    logger.lifecycle(
+                        "   Excluding ${(libraryTempDir.listFiles()?.size ?: 0) - composeFileNames.size} SwiftUI-only icon(s) from Compose output"
+                    )
+                    staging
+                }
 
             val librarySubdir =
                 when {
@@ -65,7 +105,7 @@ internal class SvgConversionCoordinator(
 
             try {
                 converter.convertDirectory(
-                    inputDirectory = libraryTempDir,
+                    inputDirectory = conversionDir,
                     outputDirectory = context.outputDir,
                     packageName = context.packageName,
                     generatePreview = ext.generatePreview.get(),
@@ -75,7 +115,7 @@ internal class SvgConversionCoordinator(
                     librarySubdir = librarySubdir,
                     nameTransformer = nameTransformer,
                 )
-                val iconCount = libraryTempDir.listFiles()?.size ?: 0
+                val iconCount = conversionDir.listFiles()?.size ?: 0
                 totalConverted += iconCount
                 logger.lifecycle("      Converted $iconCount icons")
             } catch (e: Exception) {

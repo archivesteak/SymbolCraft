@@ -1,6 +1,7 @@
 package io.github.archivesteak.symbolcraft.tasks
 
 import io.github.archivesteak.symbolcraft.download.SvgDownloader
+import io.github.archivesteak.symbolcraft.model.IconTarget
 import io.github.archivesteak.symbolcraft.plugin.SymbolCraftExtension
 import io.github.archivesteak.symbolcraft.tasks.internal.DownloadCoordinator
 import io.github.archivesteak.symbolcraft.tasks.internal.GenerationContext
@@ -124,6 +125,21 @@ abstract class GenerateSymbolsTask : DefaultTask() {
         logger.lifecycle("Generating icons...")
         logger.lifecycle("Icons to generate: $totalIcons total")
         logger.debug("Cache directory: ${context.cacheBaseDir.absolutePath}")
+
+        // Icons targeting SwiftUI only generate nothing when SwiftUI output is disabled.
+        if (context.swiftUIOutputDir == null) {
+            val silentIcons =
+                context.config.filterValues { configs ->
+                    configs.all { IconTarget.COMPOSE !in it.targets }
+                }
+            if (silentIcons.isNotEmpty()) {
+                logger.warn(
+                    "Warning: ${silentIcons.size} icon(s) target SwiftUI only but swiftUI " +
+                        "output is disabled; they will generate nothing: " +
+                        silentIcons.keys.sorted().joinToString(", ")
+                )
+            }
+        }
     }
 
     /**

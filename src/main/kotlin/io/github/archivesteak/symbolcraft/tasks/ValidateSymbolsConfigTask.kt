@@ -1,5 +1,6 @@
 package io.github.archivesteak.symbolcraft.tasks
 
+import io.github.archivesteak.symbolcraft.model.IconTarget
 import io.github.archivesteak.symbolcraft.plugin.SymbolCraftExtension
 import org.gradle.api.DefaultTask
 import org.gradle.api.provider.Property
@@ -56,6 +57,20 @@ abstract class ValidateSymbolsConfigTask : DefaultTask() {
             throw IllegalStateException(
                 "Invalid SymbolCraft configuration:\n" + problems.joinToString("\n") { "  - $it" }
             )
+        }
+
+        // An icon whose targets exclude Compose while SwiftUI output is disabled generates
+        // nothing at all — almost always a configuration mistake.
+        if (!swiftUI.enabled.get()) {
+            val silentIcons =
+                config.filterValues { configs -> configs.all { IconTarget.COMPOSE !in it.targets } }
+            if (silentIcons.isNotEmpty()) {
+                logger.warn(
+                    "Warning: ${silentIcons.size} icon(s) target SwiftUI only but swiftUI " +
+                        "output is disabled; they will generate nothing: " +
+                        silentIcons.keys.sorted().joinToString(", ")
+                )
+            }
         }
 
         val count = config.values.sumOf { it.size }
