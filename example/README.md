@@ -17,7 +17,7 @@ esm.sh Material Symbols, Simple Icons) and checked-in local SVGs (`shared/icons/
 
 ## Version Baseline
 
-- **SymbolCraft**: 0.8.0 (included build of the parent directory)
+- **SymbolCraft**: 0.8.1 (included build of the parent directory)
 - **Compose Multiplatform**: 1.11.1
 - **Kotlin**: 2.3.21
 

@@ -4,7 +4,7 @@
 
 **SymbolCraft** is a Gradle plugin for Kotlin Multiplatform projects that generates icons on-demand from multiple icon libraries (Material Symbols, Bootstrap Icons, Heroicons, etc.) as Compose `ImageVector` sources and as custom SF Symbol `.symbolset` catalogs for native SwiftUI.
 
-- **Version**: v0.8.0
+- **Version**: v0.8.1
 - **Status**: Published to GitHub Packages (fork of [kingsword09/SymbolCraft](https://github.com/kingsword09/SymbolCraft), not on Maven Central / Plugin Portal)
 - **Language**: Kotlin 2.0.0
 - **Minimum Gradle version**: 8.0+
@@ -20,7 +20,8 @@ Consumption is wired by build mechanics, not by paths: the Compose output joins 
 of the same project (or is shared to another project as a Gradle variant), and the symbol catalog
 is a dependency of the Kotlin Gradle plugin's `embedAndSign*AppleFrameworkForXcode` tasks, so the
 Gradle run Xcode already makes produces it. The Xcode project references the two generated files
-and declares them as outputs of the Kotlin run-script phase. v0.8.0 replaced the previous design,
+and declares them as outputs of the Kotlin run-script phase. v0.8.1 (the first published build of
+this design) replaced the previous design,
 in which one task in the Compose UI module wrote into a sibling iOS app folder and was triggered
 only by that module's Kotlin compilation — the iOS build could never regenerate its own assets.
 
@@ -279,6 +280,12 @@ Both jobs are **dormant on this fork** (no secrets); gate variables `ENABLE_GRAD
 ```
 
 Consumers need a token with `read:packages` even to read public packages.
+
+**Never reuse a version number.** GitHub Packages refuses re-uploads, and the publish job skips
+versions the served `maven-metadata.xml` already lists. `0.8.0` is such a burned number: a build
+was uploaded on 2026-08-13, long before the v0.8.0 redesign commit, so the redesign shipped as
+v0.8.1. The `validate-plugin` job prints the versions GitHub Packages actually serves for the
+plugin and its three marker artifacts on every run.
 
 ---
 

@@ -52,7 +52,7 @@ Transitive dependencies (e.g. `svg-to-compose`) resolve from `mavenCentral()`, s
 ```toml
 # libs.versions.toml
 [plugins]
-symbolCraft = { id = "io.github.archivesteak.symbolcraft", version = "0.8.0" }
+symbolCraft = { id = "io.github.archivesteak.symbolcraft", version = "0.8.1" }
 ```
 
 ## Where to apply it
