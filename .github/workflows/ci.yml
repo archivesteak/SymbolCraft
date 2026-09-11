@@ -132,6 +132,9 @@ jobs:
     name: Validate Plugin
     runs-on: ubuntu-latest
     needs: build
+    permissions:
+      contents: read
+      packages: read
 
     steps:
     - name: Checkout code
@@ -163,6 +166,23 @@ jobs:
           echo "Plugin not found in local Maven repository"
           exit 1
         fi
+
+    # What consumers actually see: the Maven metadata served by GitHub Packages for the plugin
+    # and its three plugin-marker artifacts.
+    - name: List versions published to GitHub Packages
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        REPO: ${{ github.repository }}
+        ACTOR: ${{ github.actor }}
+      run: |
+        list_versions() {
+          echo "== $1"
+          curl -sf -u "$ACTOR:$GITHUB_TOKEN" "https://maven.pkg.github.com/$REPO/$1/maven-metadata.xml" | grep -oE '<(latest|version|lastUpdated)>[^<]*' | paste -sd ' ' - || echo "(not published)"
+        }
+        list_versions io/github/archivesteak/symbolcraft
+        list_versions io/github/archivesteak/symbolcraft/io.github.archivesteak.symbolcraft.gradle.plugin
+        list_versions io/github/archivesteak/symbolcraft/compose/io.github.archivesteak.symbolcraft.compose.gradle.plugin
+        list_versions io/github/archivesteak/symbolcraft/apple/io.github.archivesteak.symbolcraft.apple.gradle.plugin
 
   release:
     name: Release
@@ -387,13 +407,19 @@ jobs:
         VERSION=$(echo "$COMMIT_MSG" | grep -oP 'chore\(release\):\s*v\K[0-9]+\.[0-9]+\.[0-9]+')
         echo "version=$VERSION" >> $GITHUB_OUTPUT
 
+    # GitHub Packages rejects re-uploads of an existing version, so publish only when the
+    # served Maven metadata does not list it yet (the metadata is what consumers resolve).
     - name: Check if version is already published
       id: published_check
       env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        REPO: ${{ github.repository }}
+        ACTOR: ${{ github.actor }}
       run: |
         VERSION=${{ steps.extract_version.outputs.version }}
-        if gh api "/users/${{ github.repository_owner }}/packages/maven/io.github.archivesteak.symbolcraft/versions" --jq '.[].name' | grep -qx "$VERSION"; then
+        METADATA=$(curl -sf -u "$ACTOR:$GITHUB_TOKEN" "https://maven.pkg.github.com/$REPO/io/github/archivesteak/symbolcraft/maven-metadata.xml" || true)
+        echo "Published versions: $(echo "$METADATA" | grep -oE '<version>[^<]*' | sed 's/<version>//' | paste -sd ' ' -)"
+        if echo "$METADATA" | grep -q "<version>$VERSION</version>"; then
           echo "Version $VERSION already exists on GitHub Packages; skipping publish."
           echo "exists=true" >> $GITHUB_OUTPUT
         else
