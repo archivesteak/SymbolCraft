@@ -194,8 +194,11 @@ jobs:
 
     - name: Extract version from commit message
       id: extract_version
+      # Passed through the environment: interpolating the message into the script would let
+      # backticks or quotes in a commit body break (or execute inside) the shell.
+      env:
+        COMMIT_MSG: ${{ github.event.head_commit.message }}
       run: |
-        COMMIT_MSG="${{ github.event.head_commit.message }}"
         VERSION=$(echo "$COMMIT_MSG" | grep -oP 'chore\(release\):\s*v\K[0-9]+\.[0-9]+\.[0-9]+')
         if [ -z "$VERSION" ]; then
           echo "No valid version found in commit message: $COMMIT_MSG"
@@ -293,8 +296,11 @@ jobs:
 
     - name: Extract version from commit message
       id: extract_version
+      # Passed through the environment: interpolating the message into the script would let
+      # backticks or quotes in a commit body break (or execute inside) the shell.
+      env:
+        COMMIT_MSG: ${{ github.event.head_commit.message }}
       run: |
-        COMMIT_MSG="${{ github.event.head_commit.message }}"
         VERSION=$(echo "$COMMIT_MSG" | grep -oP 'chore\(release\):\s*v\K[0-9]+\.[0-9]+\.[0-9]+')
         echo "version=$VERSION" >> $GITHUB_OUTPUT
 
@@ -330,8 +336,11 @@ jobs:
 
     - name: Extract version from commit message
       id: extract_version
+      # Passed through the environment: interpolating the message into the script would let
+      # backticks or quotes in a commit body break (or execute inside) the shell.
+      env:
+        COMMIT_MSG: ${{ github.event.head_commit.message }}
       run: |
-        COMMIT_MSG="${{ github.event.head_commit.message }}"
         VERSION=$(echo "$COMMIT_MSG" | grep -oP 'chore\(release\):\s*v\K[0-9]+\.[0-9]+\.[0-9]+')
         echo "version=$VERSION" >> $GITHUB_OUTPUT
 
@@ -370,8 +379,11 @@ jobs:
 
     - name: Extract version from commit message
       id: extract_version
+      # Passed through the environment: interpolating the message into the script would let
+      # backticks or quotes in a commit body break (or execute inside) the shell.
+      env:
+        COMMIT_MSG: ${{ github.event.head_commit.message }}
       run: |
-        COMMIT_MSG="${{ github.event.head_commit.message }}"
         VERSION=$(echo "$COMMIT_MSG" | grep -oP 'chore\(release\):\s*v\K[0-9]+\.[0-9]+\.[0-9]+')
         echo "version=$VERSION" >> $GITHUB_OUTPUT
 
