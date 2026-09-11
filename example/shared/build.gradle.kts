@@ -1,5 +1,6 @@
 import io.github.archivesteak.symbolcraft.model.*
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -44,6 +45,12 @@ kotlin {
         androidMain.get().dependsOn(composeMain)
         jvmMain.get().dependsOn(composeMain)
     }
+}
+
+// Compose code (the generated @Preview functions) exists only in composeMain, so the Compose
+// compiler must stay off the Kotlin/Native compilations: the iOS framework has no Compose runtime.
+composeCompiler {
+    targetKotlinPlatforms.set(setOf(KotlinPlatformType.androidJvm, KotlinPlatformType.jvm))
 }
 
 android {
