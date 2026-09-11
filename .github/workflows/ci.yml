@@ -82,10 +82,51 @@ jobs:
       working-directory: example
       run: |
         chmod +x ./gradlew
-        # Test SymbolCraft icon generation
-        ./gradlew :composeApp:generateSymbolCraftIcons --stacktrace
-        # Build the example project
+        # SymbolCraft is applied to :shared; both outputs are generated there
+        ./gradlew :shared:generateSymbolCraftIcons :shared:generateSymbolCraftSymbolSets --stacktrace
+        # Build the example project (Android + Desktop; iOS is built by the ios-build job)
         ./gradlew build --stacktrace
+
+  ios-build:
+    name: Build iOS example (Xcode)
+    runs-on: macos-latest
+    needs: build
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v5
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v5
+      with:
+        java-version: '17'
+        distribution: 'corretto'
+
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v4
+
+    - name: Generate the SF Symbol catalog
+      working-directory: example
+      run: |
+        chmod +x ./gradlew
+        ./gradlew :shared:generateSymbolCraftSymbolSets --stacktrace
+        ls shared/build/generated/symbolcraft/swiftui/SymbolCraft.xcassets
+
+    # actool is what Xcode runs on asset catalogs: this proves the generated .symbolset bundles
+    # are accepted before the full app build below.
+    - name: Validate the catalog with actool
+      working-directory: example
+      run: |
+        mkdir -p "$RUNNER_TEMP/actool"
+        xcrun actool shared/build/generated/symbolcraft/swiftui/SymbolCraft.xcassets           --compile "$RUNNER_TEMP/actool"           --platform iphonesimulator           --minimum-deployment-target 16.0           --output-format human-readable-text           --warnings --errors
+        test -f "$RUNNER_TEMP/actool/Assets.car"
+
+    # Runs the "Compile Kotlin Framework" script phase (Gradle builds :shared and regenerates the
+    # catalog), then compiles Symbols.swift and the catalog into the app.
+    - name: Build the iOS app
+      working-directory: example/iosApp
+      run: |
+        xcodebuild -project iosApp.xcodeproj -target iosApp -configuration Debug           -sdk iphonesimulator           CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""           build
 
   validate-plugin:
     name: Validate Plugin
@@ -129,7 +170,7 @@ jobs:
     permissions:
       contents: write
       packages: write
-    needs: [build, example-test, validate-plugin]
+    needs: [build, example-test, validate-plugin, ios-build]
     if: github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'chore(release):')
 
     steps:
@@ -207,7 +248,7 @@ jobs:
                   gradlePluginPortal()
               }
           }
-          // build.gradle.kts
+          // shared/build.gradle.kts (the module Xcode embeds)
           plugins {
               id("io.github.archivesteak.symbolcraft") version "${{ steps.extract_version.outputs.version }}"
           }

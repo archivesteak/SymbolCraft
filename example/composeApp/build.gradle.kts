@@ -1,7 +1,5 @@
-import io.github.archivesteak.symbolcraft.model.*
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -9,7 +7,6 @@ plugins {
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.composeHotReload)
-    alias(libs.plugins.symbolCraft)
 }
 
 kotlin {
@@ -18,29 +15,18 @@ kotlin {
             jvmTarget.set(JvmTarget.JVM_17)
         }
     }
-    
-    listOf(
-        iosArm64(),
-        iosSimulatorArm64()
-    ).forEach { iosTarget ->
-        iosTarget.binaries.framework {
-            baseName = "ComposeApp"
-            isStatic = true
-        }
-    }
-    
+
     jvm()
-    
+
     sourceSets {
         androidMain.dependencies {
             implementation(libs.compose.ui.tooling.preview)
             implementation(libs.compose.ui.tooling)
             implementation(libs.androidx.activity.compose)
         }
-        commonMain {
-            kotlin.srcDir("src/commonMain/generated/symbols")
-        }
         commonMain.dependencies {
+            // Generated icons arrive through :shared (SymbolCraft is applied there).
+            implementation(projects.shared)
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)
@@ -84,79 +70,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-}
-
-symbolCraft {
-    // Output directory for generated icons
-    outputDirectory.set("src/commonMain/generated/symbols")
-    packageName.set("io.github.archivesteak.example")
-
-    // Enable preview generation (optional)
-    generatePreview.set(true)
-
-    // SwiftUI output: custom SF Symbol .symbolset bundles for the iosApp
-    // Drag the generated .symbolset folders into the iosApp asset catalog in Xcode,
-    // then use them via `Image(symbol: .homeOutlined)` (see Symbols.swift).
-    swiftUI {
-        enabled.set(true)
-        outputDirectory.set("../iosApp/GeneratedSymbols")
-    }
-
-    // Configure naming transformation
-    naming {
-        pascalCase()  // Use PascalCase convention
-    }
-
-    // Material Symbols examples
-    materialSymbol("search") {
-        standardWeights() // Adds 400, 500, 700 weights with outlined variant
-    }
-
-    materialSymbol("home") {
-        weights(400, 500, variant = SymbolVariant.ROUNDED) // Specify variant
-        bothFills(weight = 400) // Both filled and unfilled
-    }
-
-    materialSymbol("person") {
-        allVariants(weight = SymbolWeight.W500) // All variants (outlined, rounded, sharp)
-    }
-
-    // Traditional style method still supported
-    materialSymbol("settings") {
-        style(weight = 400, variant = SymbolVariant.OUTLINED)
-        style(weight = 500, variant = SymbolVariant.ROUNDED, fill = SymbolFill.FILLED)
-    }
-
-    // Apple-only icon: emitted as a .symbolset for SwiftUI, but NOT as Compose sources
-    // (no point shipping an AirPlay ImageVector to Android/Desktop).
-    materialSymbol("airplay") {
-        style(weight = 400, variant = SymbolVariant.OUTLINED)
-        swiftUIOnly()
-    }
-
-    // External icons with URL template
-    externalIcons(*listOf("abacus", "ab-testing").toTypedArray(), libraryName = "mdi") {
-        urlTemplate = "https://esm.sh/@mdi/svg@latest/svg/{name}.svg"
-    }
-
-    // External icons with multiple style variants using the new styleParam API
-    externalIcons(*listOf("home", "search", "person", "settings", "arrow_back").toTypedArray(), libraryName = "official") {
-        urlTemplate = "https://esm.sh/@material-symbols/svg-400@latest/rounded/{name}{fill}.svg"
-        styleParam("fill") {
-            values("", "-fill")  // unfilled, filled variants
-        }
-    }
-
-    // Local icons
-    localIcons("local-test") {
-        directory = project.relativePath("src/commonMain/composeResources/files")
-        include("**/*.svg")
-    }
-
-    // Simple Icons - for testing Locale issue (GitHub issue #38)
-    externalIcons("github", libraryName = "simple-icons") {
-        urlTemplate = "https://simpleicons.org/icons/{name}.svg"
     }
 }
 

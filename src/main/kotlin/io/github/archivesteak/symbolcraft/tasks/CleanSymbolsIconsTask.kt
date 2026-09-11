@@ -1,130 +1,48 @@
 package io.github.archivesteak.symbolcraft.tasks
 
-import io.github.archivesteak.symbolcraft.SymbolCraftDefaults
-import java.io.File
+import io.github.archivesteak.symbolcraft.tasks.internal.GeneratedFileCleaner
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
-import org.gradle.api.tasks.Input
-import org.gradle.api.tasks.InputDirectory
 import org.gradle.api.tasks.Internal
-import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.TaskAction
 
 /**
- * Task that deletes generated icon files created by [GenerateSymbolsTask].
+ * Deletes everything `generateSymbolCraftIcons` and `generateSymbolCraftSymbolSets` produced.
  *
- * Exposed to consumers as `cleanSymbolCraftIcons`.
- *
- * This task is fully compatible with Gradle Configuration Cache.
+ * Exposed to consumers as `cleanSymbolCraftIcons`. Source files are only deleted when they carry
+ * the SymbolCraft header. Compatible with the configuration cache.
  */
 abstract class CleanSymbolsIconsTask : DefaultTask() {
 
-    @get:Input abstract val packageName: Property<String>
+    @get:Internal abstract val packageName: Property<String>
 
-    @get:InputDirectory @get:Optional abstract val outputDirectory: DirectoryProperty
+    /** Compose source output directory. */
+    @get:Internal abstract val outputDirectory: DirectoryProperty
 
-    /** SwiftUI `.symbolset` output directory to clean; present only when SwiftUI is enabled. */
-    @get:Internal abstract val swiftUIOutputDirectory: DirectoryProperty
+    /** Asset catalog holding the `.symbolset` bundles. */
+    @get:Internal abstract val swiftUICatalogDirectory: DirectoryProperty
 
-    /** Directory holding the generated `Symbols.swift`; present only when SwiftUI is enabled. */
-    @get:Internal abstract val swiftUISourceDirectory: DirectoryProperty
+    /** Generated `Symbols.swift`, wherever it was written. */
+    @get:Internal abstract val swiftUISourceFile: RegularFileProperty
 
-    /** Deletes all generated icon files. */
+    /** Deletes all generated files. */
     @TaskAction
     fun clean() {
-        if (!outputDirectory.isPresent) {
-            logger.lifecycle("Output directory not configured, skipping clean.")
-            return
-        }
-        val pkgName = packageName.get()
-        val outputDir = outputDirectory.get().asFile
-        val packagePath = pkgName.replace('.', '/')
-        val symbolsDir = File(outputDir, "$packagePath/icons")
-        val mainSymbolsFile = File(outputDir, "$packagePath/__Icons.kt")
-
+        val cleaner = GeneratedFileCleaner(logger)
         var deletedCount = 0
 
-        // Clean all library subdirectories
-        if (symbolsDir.exists()) {
-            symbolsDir
-                .walkTopDown()
-                .filter { it.isFile && it.extension == "kt" }
-                .forEach { file ->
-                    logger.debug("Deleting generated file: ${file.relativeTo(symbolsDir).path}")
-                    if (deleteGeneratedKotlinFile(file)) deletedCount++
-                }
-
-            // Clean empty directories
-            symbolsDir
-                .walkBottomUp()
-                .filter { it.isDirectory && it != symbolsDir && it.listFiles()?.isEmpty() == true }
-                .forEach { dir ->
-                    logger.debug("Removing empty directory: ${dir.name}")
-                    dir.delete()
-                }
-
-            // Remove the icons directory itself if empty
-            if (symbolsDir.listFiles()?.isEmpty() == true) {
-                symbolsDir.delete()
-                logger.debug("Removed empty icons directory")
-            }
+        outputDirectory.orNull?.asFile?.let { dir ->
+            deletedCount += cleaner.cleanGeneratedKotlin(dir, packageName.get())
         }
-
-        // Clean main symbols file
-        if (mainSymbolsFile.exists()) {
-            logger.debug("Deleting main symbols file")
-            if (deleteGeneratedKotlinFile(mainSymbolsFile)) deletedCount++
+        swiftUICatalogDirectory.orNull?.asFile?.let { catalog ->
+            deletedCount += cleaner.cleanSymbolSets(catalog)
         }
-
-        // Clean SwiftUI outputs: .symbolset bundles plus the Symbols.swift helper, wherever it
-        // was written (output dir, asset-catalog parent, or a custom swiftSourceOutputDirectory).
-        swiftUIOutputDirectory.orNull?.asFile?.let { dir ->
-            dir.listFiles()
-                ?.filter { it.isDirectory && it.name.endsWith(".symbolset") }
-                ?.forEach { symbolSet ->
-                    logger.debug("Deleting symbol set: ${symbolSet.name}")
-                    symbolSet.deleteRecursively()
-                    deletedCount++
-                }
+        swiftUISourceFile.orNull?.asFile?.let { file ->
+            if (cleaner.deleteGeneratedSource(file)) deletedCount++
         }
-        sequenceOf(swiftUIOutputDirectory.orNull?.asFile, swiftUISourceDirectory.orNull?.asFile)
-            .filterNotNull()
-            .distinct()
-            .forEach { dir ->
-                if (deleteGeneratedSwiftSource(File(dir, "Symbols.swift"))) deletedCount++
-            }
 
         logger.lifecycle("Cleaned $deletedCount generated icon files")
-    }
-
-    /**
-     * Deletes `Symbols.swift` only when it carries the SymbolCraft header, so a user's own file
-     * with the same name in a shared source folder is never touched.
-     */
-    private fun deleteGeneratedSwiftSource(file: File): Boolean {
-        if (!file.isFile) return false
-        if (!file.readText().startsWith(SymbolCraftDefaults.GENERATED_FILE_HEADER)) {
-            logger.warn("   Refusing to delete ${file.absolutePath}: not generated by SymbolCraft")
-            return false
-        }
-        logger.debug("Deleting ${file.name}")
-        return file.delete()
-    }
-
-    /**
-     * Deletes a Kotlin file only when it carries the SymbolCraft header, so hand-written sources
-     * that happen to live under the generated icons directory are never destroyed.
-     */
-    private fun deleteGeneratedKotlinFile(file: File): Boolean {
-        if (!file.readText().startsWith(SymbolCraftDefaults.GENERATED_FILE_HEADER)) {
-            logger.warn("   Refusing to delete ${file.absolutePath}: not generated by SymbolCraft")
-            return false
-        }
-        if (!file.delete()) {
-            logger.warn("   Failed to delete: ${file.absolutePath}")
-            return false
-        }
-        return true
     }
 }

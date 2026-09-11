@@ -2,18 +2,19 @@
 
 ![GitHub Release](https://img.shields.io/github/v/release/archivesteak/SymbolCraft)
 
-A Gradle plugin for Kotlin Multiplatform projects that generates icons on demand from multiple icon libraries (Material Symbols, Bootstrap Icons, Heroicons, local SVGs, any URL template) — as Compose `ImageVector` code, and optionally as custom SF Symbol `.symbolset` bundles for SwiftUI.
+A Gradle plugin for Kotlin Multiplatform projects that generates icons on demand from multiple icon libraries (Material Symbols, Bootstrap Icons, Heroicons, local SVGs, any URL template) — as Compose `ImageVector` code for Android/Desktop, and as custom SF Symbol `.symbolset` catalogs for native SwiftUI.
 
+- One declaration, two outputs: the same SVG becomes a Compose `ImageVector` and a `.symbolset`, downloaded once
+- Lives in the module both builds already compile: apply it to your shared Kotlin module, and the Android build and the Xcode build each produce the output they need
 - On-demand generation: only the icons you declare, instead of bundling Material Icons Extended (11.3 MB)
-- Smart caching: 7-day SVG cache with automatic invalidation; relative (project-local) or absolute (shared) cache paths
+- Outputs stay in `build/`; nothing is written into another module's source tree
+- Smart caching: 7-day SVG cache; three cacheable, configuration-cache-compatible tasks
 - Parallel downloads via Kotlin coroutines, with configurable retries and exponential backoff
 - Deterministic output: no timestamps, normalized floats — same input, same bytes
 - Full Material Symbols style support: weight (100–700), variant (outlined/rounded/sharp), fill state
 - Flexible naming: PascalCase, camelCase, snake_case, kebab-case, custom transformers
 - Compose Preview generation (configurable annotation class)
-- SwiftUI output: custom SF Symbols with real per-weight glyphs mapped to SF weight columns, plus a `Symbols.swift` helper enum
-- Per-icon platform targeting: `swiftUIOnly()` / `composeOnly()` keep platform-specific icons out of the other platform's output
-- Gradle task cache and configuration-cache compatible; wires itself ahead of Kotlin compilation
+- Per-icon platform targeting: `swiftUIOnly()` / `composeOnly()`
 - Local SVG support: convert checked-in SVGs with glob include/exclude patterns
 
 ## Installation
@@ -51,137 +52,71 @@ Transitive dependencies (e.g. `svg-to-compose`) resolve from `mavenCentral()`, s
 ```toml
 # libs.versions.toml
 [plugins]
-symbolCraft = { id = "io.github.archivesteak.symbolcraft", version = "0.7.0" }
+symbolCraft = { id = "io.github.archivesteak.symbolcraft", version = "0.8.0" }
 ```
 
+## Where to apply it
+
+Apply the plugin to **the module both platform builds compile**. That module owns the icon declaration, and each build produces the output it needs from the same declaration:
+
+| Project layout | Apply to | Compose sources go to | Symbol catalog is produced by |
+|---|---|---|---|
+| Shared Kotlin logic + Compose on Android + **SwiftUI on iOS** (KMP wizard default) | `shared` | a non-iOS source set, e.g. `androidMain` (`composeSourceSet`) | Xcode's "Compile Kotlin Framework" phase, when it embeds the `shared` framework |
+| Shared Compose UI on every platform | `composeApp` | `commonMain` (default) | the same phase, when it embeds the `composeApp` framework |
+| Icons in their own module | `:symbols` (any project) | consumers via the `.compose` plugin | consumers via the `.apple` plugin |
+
+Never apply it to an Android-only UI module and point it at the iOS app: that module never takes part in the iOS build, so the iOS assets would only ever change when someone builds the Android app.
+
 ```kotlin
+// shared/build.gradle.kts
 plugins {
+    alias(libs.plugins.kotlinMultiplatform)
+    alias(libs.plugins.androidLibrary)
     alias(libs.plugins.symbolCraft)
 }
-```
 
-## Quick start
+kotlin {
+    androidTarget(); jvm(); iosArm64(); iosSimulatorArm64()
+    sourceSets {
+        androidMain.dependencies { implementation(libs.compose.ui) } // ImageVector lives here
+    }
+}
 
-```kotlin
 symbolCraft {
-    packageName.set("com.app.symbols")
-    outputDirectory.set("src/commonMain/kotlin")
+    packageName.set("com.example.icons")
+    composeSourceSet.set("androidMain")   // keep Compose out of the iOS framework
+    swiftUI { enabled.set(true) }
 
-    materialSymbol("home") {
-        bothFills(weight = 400)                  // filled + unfilled
-        style(weight = 500, variant = SymbolVariant.ROUNDED)
-    }
-
-    materialSymbols("search", "settings") {
-        standardWeights()                        // 400, 500, 700
-    }
-
-    externalIcons("bell", "calendar", libraryName = "bootstrap-icons") {
-        urlTemplate = "https://esm.sh/bootstrap-icons@latest/icons/{name}.svg"
-    }
-
-    localIcons(libraryName = "brand") {
-        directory = "design/exported"
-        include("brand/**/*.svg")
-    }
+    materialSymbol("home") { standardWeights() }
+    materialSymbol("airplay") { style(weight = 400); swiftUIOnly() }
 }
 ```
 
-Generate and use:
+The Android app gets the icons through its normal `implementation(project(":shared"))`. The iOS app gets the catalog through the Xcode setup described below.
 
-```bash
-./gradlew generateSymbolCraftIcons
-```
+## Outputs
 
-```kotlin
-import com.app.symbols.icons.materialsymbols.Icons
-import com.app.symbols.icons.materialsymbols.icons.HomeW400Outlined
+All outputs default to the applying project's `build/` directory and are exclusive task outputs, so Gradle's build cache and up-to-date checks work:
 
-Icon(imageVector = Icons.HomeW400Outlined, contentDescription = "Home")
-```
+| Output | Task | Default location |
+|---|---|---|
+| SVG workspace | `downloadSymbolCraftSvgs` | `build/symbolcraft/svgs/<library>/` |
+| Compose sources | `generateSymbolCraftIcons` | `build/generated/symbolcraft/compose/` |
+| SF Symbol catalog | `generateSymbolCraftSymbolSets` | `build/generated/symbolcraft/swiftui/SymbolCraft.xcassets/` |
+| Swift helper | `generateSymbolCraftSymbolSets` | `build/generated/symbolcraft/swiftui/Symbols.swift` |
 
-Generated Material Symbols file names follow `{Name}W{Weight}{Variant}{Fill}.kt`, e.g. `SearchW400Outlined.kt`, `HomeW500RoundedFill.kt`.
+When a Kotlin (or Android) plugin is applied to the same project, the Compose output is added to `composeSourceSet` automatically (`commonMain` for multiplatform, `main` otherwise), and Kotlin compilation depends on generation. Every `embedAndSign*AppleFrameworkForXcode` task of the project depends on the catalog.
 
-## Configuration reference
+`outputDirectory` and `swiftUI.outputDirectory` remain available if you want committed output instead (relative paths resolve against the project directory). Point the SwiftUI one at a dedicated child folder of your app's `.xcassets`; `Symbols.swift` is then written to the catalog's parent, because Xcode never compiles sources stored inside an asset catalog.
 
-```kotlin
-symbolCraft {
-    packageName.set("com.app.symbols")           // required
-    outputDirectory.set("src/commonMain/kotlin") // required
-    cacheEnabled.set(true)                       // default: true
-    cacheDirectory.set("symbolcraft-cache")      // default: build/symbolcraft-cache
-    generatePreview.set(false)                   // default: false
-    previewAnnotationClass.set("androidx.compose.ui.tooling.preview.Preview")
-    maxRetries.set(3)                            // default: 3
-    retryDelayMs.set(1000)                       // default: 1000 ms
+## Xcode setup (SwiftUI)
 
-    naming {
-        pascalCase()                // default; also camelCase(), snakeCase(), kebabCase(),
-                                    // lowerCase(), upperCase(), snakeCase(uppercase = true)
-        suffix.set("Icon")          // optional: prefix, suffix, removePrefix, removeSuffix
-        customTransformer(object : IconNameTransformer() {   // advanced
-            override fun transform(fileName: String) = fileName.uppercase() + "Icon"
-        })
-    }
-}
-```
+The catalog is generated by the same Gradle run Xcode already makes to embed the Kotlin framework, so the run-script phase from the [Kotlin direct-integration docs](https://kotlinlang.org/docs/multiplatform/multiplatform-direct-integration.html) stays as it is. Then, once:
 
-### Material Symbols styles
+1. **Add the generated files as references** (File > Add Files, uncheck "Copy items"): `shared/build/generated/symbolcraft/swiftui/SymbolCraft.xcassets` and `Symbols.swift`. Xcode compiles asset catalogs and sources from any path.
+2. **Declare them as outputs of the "Compile Kotlin Framework" script phase** (Output Files): `$(SRCROOT)/../shared/build/generated/symbolcraft/swiftui/SymbolCraft.xcassets` and `.../Symbols.swift`. Xcode needs this for any input produced by a script; without it a fresh clone fails with "Build input file cannot be found".
 
-- `weight`: 100–700 (`SymbolWeight.W100`…`W700`, or plain Int)
-- `variant`: `SymbolVariant.OUTLINED` (default), `ROUNDED`, `SHARP`
-- `fill`: `SymbolFill.UNFILLED` (default), `FILLED`
-
-Convenience methods inside `materialSymbol("...") { }`:
-
-| Method | Adds |
-|---|---|
-| `style(weight, variant, fill)` | one style combination |
-| `weights(400, 500, ...)` | several weights, one variant/fill |
-| `standardWeights()` | 400, 500, 700 |
-| `allVariants(weight = 400)` | outlined + rounded + sharp |
-| `bothFills(weight = 500)` | unfilled + filled |
-
-Filled Material Symbols generated by the built-in DSL are named `...Fill` (since 0.5.0; previously `...fill1`).
-
-### External sources with variants
-
-`urlTemplate` must be a full `https://` URL; `{name}` and any `{key}` declared via `styleParam` are substituted. Multiple values produce the Cartesian product:
-
-```kotlin
-externalIcons("home", "search", libraryName = "heroicons") {
-    urlTemplate = "https://cdn.jsdelivr.net/npm/heroicons@latest/24/{style}/{name}.svg"
-    styleParam("style") { values("outline", "solid") }
-}
-```
-
-### Local SVGs
-
-```kotlin
-localIcons(libraryName = "brand") {
-    directory = "src/commonMain/composeResources/files/icons"
-    include("**/*.svg")     // default
-    exclude("draft/**")
-}
-```
-
-## SwiftUI output (custom SF Symbols)
-
-The same SVGs can also become custom SF Symbol `.symbolset` bundles — Dynamic Type, rendering modes (monochrome/hierarchical/palette), text alignment, iOS 13+.
-
-```kotlin
-swiftUI {
-    enabled.set(true)                                 // default: false
-    outputDirectory.set("iosApp/Assets.xcassets/SymbolCraft")
-    scaleFactor.set(1.0)                              // default: 1.0
-    generateSwiftEnum.set(true)                       // default: true
-    // swiftSourceOutputDirectory.set("iosApp/Sources/Generated")  // optional override
-}
-```
-
-Pointing `outputDirectory` into your `.xcassets` (a **dedicated child folder**, as above) makes the bundles compile automatically via a synchronized group — no drag-into-Xcode step. Xcode treats asset catalogs as leaves, so `Symbols.swift` is written to the catalog's parent directory instead (or wherever `swiftSourceOutputDirectory` says).
-
-Material weights map to real SF weight columns (W400->Regular, W500->Medium, W700->Bold, …): each `(icon, variant, fill)` combination becomes one `.symbolset` with the full 27-variant grid — configured weights use genuine downloaded glyphs, the rest are derived per Apple's relative sizing. External/local icons produce Regular-only sets.
+The Kotlin docs already require that script phase to sit before Compile Sources, so both files exist before actool and swiftc run. IDE-driven iOS builds (Android Studio, Fleet) skip the script and run the embed task through Gradle directly, which produces the catalog too. See `example/iosApp/iosApp.xcodeproj` for a project set up this way.
 
 In Swift:
 
@@ -192,74 +127,143 @@ GeneratedSymbol.homeOutlined.image(boxSize: 24) // exact 24x24 pt box
 
 `.symbolset` glyphs size by font, not by box. The generated `Symbols.swift` exposes `GeneratedSymbol.pointScale` (= 1 / (1.7 × 0.7 × scaleFactor)) and the `image(boxSize:)` helper to convert an artwork box to the right font size.
 
-## Per-icon platform targeting
-
-Some icons only make sense on one platform — `airplay` is an Apple-only concept, so a Compose `ImageVector` for it would just pollute the common source set. Every builder supports `swiftUIOnly()` and `composeOnly()`:
+### SwiftUI options
 
 ```kotlin
-materialSymbol("airplay") {
-    style(weight = 400)
-    swiftUIOnly()   // .symbolset only — no Kotlin source is generated
-}
-
-materialSymbol("home") {
-    style(weight = 400)
-    composeOnly()   // Kotlin source only — no .symbolset
+swiftUI {
+    enabled.set(true)                 // default: false
+    scaleFactor.set(1.0)              // default: 1.0
+    generateSwiftEnum.set(true)       // default: true
+    // outputDirectory.set("../iosApp/iosApp/Assets.xcassets/SymbolCraft")  // committed mode
+    // swiftSourceOutputDirectory.set("../iosApp/iosApp/Generated")          // override
 }
 ```
 
-Works on `materialSymbol`, `externalIcon(s)`, and `localIcons`. The default is both platforms. An icon marked `swiftUIOnly()` while SwiftUI output is disabled generates nothing — the build logs a warning listing such icons.
+Material weights map to real SF weight columns (W400->Regular, W500->Medium, W700->Bold, …): each `(icon, variant, fill)` combination becomes one `.symbolset` with the full 27-variant grid — configured weights use genuine downloaded glyphs, the rest are derived per Apple's relative sizing. External/local icons produce Regular-only sets.
+
+## Icons in a separate module
+
+If the declaration should live outside the shared module, apply the producer there and consume it with the companion plugins. Consumers never reference the producer's tasks: the outputs are shared as Gradle variants, which also keeps the setup valid under Isolated Projects.
+
+```kotlin
+// symbols/build.gradle.kts — the declaration, no Kotlin plugin needed
+plugins { id("io.github.archivesteak.symbolcraft") }
+symbolCraft { swiftUI { enabled.set(true) }; materialSymbol("home") { standardWeights() } }
+
+// androidApp/build.gradle.kts — compiles the Compose sources
+plugins { id("io.github.archivesteak.symbolcraft.compose") }
+dependencies { symbolCraft(project(":symbols")) }
+symbolCraftCompose { sourceSet.set("main") } // optional
+
+// shared/build.gradle.kts — the module Xcode embeds: catalog is produced before embedding
+plugins { id("io.github.archivesteak.symbolcraft.apple") }
+dependencies { symbolCraft(project(":symbols")) }
+```
+
+## Declaring icons
+
+```kotlin
+symbolCraft {
+    packageName.set("com.example.icons")
+    generatePreview.set(false)                          // @Preview functions per icon
+    // previewAnnotationClass.set("androidx.compose.ui.tooling.preview.Preview")
+
+    naming { pascalCase() }                             // camelCase(), snakeCase(), kebabCase(), customTransformer(...)
+
+    materialSymbol("search") { standardWeights() }      // 400, 500, 700 outlined
+    materialSymbol("home") {
+        weights(400, 500, variant = SymbolVariant.ROUNDED)
+        bothFills(weight = 400)
+    }
+    materialSymbol("person") { allVariants(weight = SymbolWeight.W500) }
+
+    externalIcons("abacus", "ab-testing", libraryName = "mdi") {
+        urlTemplate = "https://esm.sh/@mdi/svg@latest/svg/{name}.svg"
+    }
+    externalIcons("home", "search", libraryName = "official") {
+        urlTemplate = "https://esm.sh/@material-symbols/svg-400@latest/rounded/{name}{fill}.svg"
+        styleParam("fill") { values("", "-fill") }      // Cartesian product of style values
+    }
+
+    localIcons("brand") {
+        directory = "icons"                             // relative to the project directory
+        include("**/*.svg")
+        exclude("legacy/**")
+    }
+}
+```
+
+Generated Compose code:
+
+```kotlin
+import com.example.icons.icons.materialsymbols.Icons as MaterialSymbols
+import com.example.icons.icons.materialsymbols.icons.HomeW400Rounded
+
+Icon(imageVector = MaterialSymbols.HomeW400Rounded, contentDescription = "Home")
+Icon(imageVector = HomeW400Rounded, contentDescription = "Home")
+```
+
+## Per-icon platform targeting
+
+Some icons only make sense on one platform — `airplay` is an Apple-only concept, so a Compose `ImageVector` for it would just pollute the Android build. Every builder supports `swiftUIOnly()` and `composeOnly()`:
+
+```kotlin
+materialSymbol("airplay") { style(weight = 400); swiftUIOnly() }   // .symbolset only
+materialSymbol("home") { style(weight = 400); composeOnly() }      // Kotlin only
+```
+
+Works on `materialSymbol`, `externalIcon(s)`, and `localIcons`. The default is both platforms. An icon marked `swiftUIOnly()` while SwiftUI output is disabled generates nothing; `validateSymbolCraftConfig` warns about such icons.
 
 ## Gradle tasks
 
 | Task | Description |
 |---|---|
-| `generateSymbolCraftIcons` | Generate all configured icons (auto-wired before Kotlin compilation) |
-| `cleanSymbolCraftCache` | Clean cached SVG files |
-| `cleanSymbolCraftIcons` | Clean generated icon files |
+| `downloadSymbolCraftSvgs` | Collect every configured SVG once (fails the build naming any icon it cannot fetch) |
+| `generateSymbolCraftIcons` | Generate Compose sources (auto-wired before Kotlin compilation) |
+| `generateSymbolCraftSymbolSets` | Generate the SF Symbol catalog (auto-wired before Xcode embedding; skipped unless `swiftUI.enabled`) |
+| `cleanSymbolCraftIcons` | Delete generated sources, bundles and `Symbols.swift` |
+| `cleanSymbolCraftCache` | Delete the SVG cache and workspace |
 | `validateSymbolCraftConfig` | Validate the configuration |
 
 ```bash
-./gradlew generateSymbolCraftIcons --rerun-tasks   # force regeneration
-./gradlew generateSymbolCraftIcons --info          # verbose logging
+./gradlew generateSymbolCraftIcons generateSymbolCraftSymbolSets --rerun-tasks   # force regeneration
+./gradlew generateSymbolCraftIcons --info                                           # verbose logging
 ```
 
 ## Caching
 
 - SVG cache lives in `build/symbolcraft-cache/svg-cache/` (7-day TTL, per-library isolation, metadata with timestamp/URL/hash) and is removed by `./gradlew clean`.
 - With a relative `cacheDirectory`, stale cache entries are pruned automatically. With an absolute path (shared cache across projects), automatic cleanup is skipped to avoid cross-project conflicts.
-- The generation task is `@CacheableTask` and configuration-cache compatible; unchanged configurations are skipped entirely.
-
-Recommended `.gitignore` entries (adjust to your package):
-
-```gitignore
-**/icons/
-**/__Icons.kt
-```
+- All three generation tasks are `@CacheableTask` and configuration-cache compatible; unchanged configurations are skipped entirely. Keep the default `build/` output locations for that: Gradle disables caching for a task whose output directory contains files it did not produce.
 
 ## Troubleshooting
 
-- **Icon not found** — check the name in the [Material Symbols browser](https://marella.github.io/material-symbols/demo/).
-- **Stale icons or cache weirdness** — `./gradlew cleanSymbolCraftCache` or `./gradlew clean`, then rerun with `--rerun-tasks`.
+- **Icon not found** — the download task fails and names the icon; check it in the [Material Symbols browser](https://marella.github.io/material-symbols/demo/).
+- **Unresolved reference to a generated icon** — `composeSourceSet` must name a source set the compiling target uses (`./gradlew validateSymbolCraftConfig`, then check the source set name in the error).
+- **Xcode: "Build input file cannot be found: …/Symbols.swift"** — add the generated files as Output Files of the Kotlin run-script phase (see Xcode setup).
+- **Stale icons or cache weirdness** — `./gradlew cleanSymbolCraftCache`, then rerun with `--rerun-tasks`.
 - **Configuration-cache errors** — rerun with `--no-configuration-cache` to confirm, and report an issue.
 - **GitHub Packages 401** — `gpr.user`/`gpr.key` missing or the PAT lacks `read:packages`.
 - Debug: `--info`, `--debug`, `--stacktrace`.
 
 ## Example app
 
-`example/` is a Compose Multiplatform app (Android, iOS, Desktop) demonstrating Material Symbols, external sources, local SVGs, and SwiftUI output into `iosApp/GeneratedSymbols`:
+`example/` is a Kotlin Multiplatform app in the native-UI layout: `shared` (Kotlin logic + the icon declaration, embedded by Xcode as the `Shared` framework), `composeApp` (Compose UI for Android and Desktop), and `iosApp` (SwiftUI, listing every generated symbol):
 
 ```bash
 cd example
-./gradlew generateSymbolCraftIcons
-./gradlew :composeApp:run        # Desktop
+./gradlew :shared:generateSymbolCraftIcons :shared:generateSymbolCraftSymbolSets
+./gradlew :composeApp:run              # Desktop
+./gradlew :composeApp:assembleDebug    # Android
+open iosApp/iosApp.xcodeproj           # iOS (macOS)
 ```
+
+CI builds the iOS app with `xcodebuild` on macOS and validates the generated catalog with `actool` on every push.
 
 ## Contributing
 
 ```bash
-./gradlew build                  # build + tests
-./gradlew publishToMavenLocal    # then test in example/
+./gradlew build                  # build + tests (TestKit, including a real Kotlin plugin download)
 ./gradlew ktfmtFormat            # format before committing (CI runs ktfmtCheck)
 ```
 

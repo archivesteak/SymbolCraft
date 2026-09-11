@@ -15,13 +15,20 @@ import org.gradle.api.provider.Property
 /**
  * DSL entry point exposed as `symbolCraft { ... }` in a consuming build script.
  *
- * The extension collects icon requests from multiple icon libraries and paths that drive
- * [io.github.archivesteak.symbolcraft.tasks.GenerateSymbolsTask].
+ * The extension collects icon requests from multiple icon libraries and the settings that drive the
+ * `downloadSymbolCraftSvgs`, `generateSymbolCraftIcons` and `generateSymbolCraftSymbolSets` tasks.
  *
  * @property cacheEnabled enables reuse of downloaded SVG assets between builds.
  * @property cacheDirectory directory that hosts cached SVG payloads (relative to `build/` by
  *   default).
- * @property outputDirectory Kotlin source folder where generated code will be written.
+ * @property outputDirectory folder where generated Kotlin sources are written. Unset (the default)
+ *   means `build/generated/symbolcraft/compose`; a relative path resolves against the project
+ *   directory. When a Kotlin plugin is applied to the same project the folder is added to
+ *   [composeSourceSet] automatically.
+ * @property composeSourceSet name of the Kotlin source set that receives the generated Compose
+ *   sources when a Kotlin plugin is applied to the same project. Unset means `commonMain` for
+ *   multiplatform projects and `main` otherwise. Use a non-iOS source set (for example
+ *   `androidMain`) in a shared module whose iOS framework must stay free of Compose.
  * @property packageName root package used for generated Kotlin types.
  * @property generatePreview toggles Compose preview function generation for each icon.
  * @property previewAnnotationClass fully qualified Compose preview annotation used when previews
@@ -35,6 +42,7 @@ constructor(private val layout: ProjectLayout, private val objects: ObjectFactor
     abstract val cacheEnabled: Property<Boolean>
     abstract val cacheDirectory: Property<String>
     abstract val outputDirectory: Property<String>
+    abstract val composeSourceSet: Property<String>
     abstract val packageName: Property<String>
     abstract val generatePreview: Property<Boolean>
     abstract val previewAnnotationClass: Property<String>
@@ -68,7 +76,7 @@ constructor(private val layout: ProjectLayout, private val objects: ObjectFactor
     init {
         cacheEnabled.convention(true)
         cacheDirectory.convention("symbolcraft-cache")
-        outputDirectory.convention("src/main/kotlin")
+        // No convention for outputDirectory / composeSourceSet: unset means "derive" (see KDoc).
         packageName.convention("io.github.archivesteak.symbolcraft.symbols")
         generatePreview.convention(false)
         previewAnnotationClass.convention(SymbolCraftDefaults.PREVIEW_ANNOTATION_CLASS)
@@ -300,34 +308,57 @@ constructor(private val layout: ProjectLayout, private val objects: ObjectFactor
     fun getIconsConfig(): Map<String, List<IconConfig>> = iconsConfig.toMap()
 
     /**
-     * Computes a deterministic hash for the current configuration.
+     * Stable description of every icon request (library, style signature, platform targets).
      *
-     * The hash is used to decide whether `generateSymbolCraftIcons` can reuse cached outputs.
+     * Feeds the up-to-date check of `downloadSymbolCraftSvgs`: any change here means a different
+     * set of SVGs has to be fetched.
      */
-    fun getConfigHash(): String {
-        val configString = buildString {
-            append("version:4.0|")
-
-            append("icons:")
-            iconsConfig.toSortedMap().forEach { (name, configs) ->
-                append("$name-[")
-                configs
-                    .sortedBy { "${it.libraryId}-${it.getSignature()}" }
-                    .forEach { config ->
-                        val targets = config.targets.sortedBy { it.name }.joinToString("+")
-                        append("${config.libraryId}:${config.getSignature()}:$targets,")
-                    }
-                append("]")
-            }
-            append("|package:").append(packageName.orNull)
-            append("|outputDir:").append(outputDirectory.orNull)
-            append("|preview:").append(generatePreview.orNull)
-            append("|previewAnnotationClass:").append(previewAnnotationClass.orNull)
-            append("|namingConfig:").append(namingConfig.snapshotSignature())
-            append("|swiftUI:").append(swiftUIConfig.snapshotSignature())
+    internal fun iconsSignature(): String = buildString {
+        append("version:5.0|icons:")
+        iconsConfig.toSortedMap().forEach { (name, configs) ->
+            append("$name-[")
+            configs
+                .sortedBy { "${it.libraryId}-${it.getSignature()}" }
+                .forEach { config ->
+                    val targets = config.targets.sortedBy { it.name }.joinToString("+")
+                    append("${config.libraryId}:${config.getSignature()}:$targets,")
+                }
+            append("]")
         }
+    }
+
+    /** Hash of everything that influences the downloaded SVG workspace. */
+    fun getDownloadHash(): String = sha256(iconsSignature())
+
+    /** Hash of everything that influences generated Compose sources. */
+    fun getComposeHash(): String =
+        sha256(
+            buildString {
+                append(iconsSignature())
+                append("|package:").append(packageName.orNull)
+                append("|preview:").append(generatePreview.orNull)
+                append("|previewAnnotationClass:").append(previewAnnotationClass.orNull)
+                append("|namingConfig:").append(namingConfig.snapshotSignature())
+            }
+        )
+
+    /** Hash of everything that influences generated `.symbolset` bundles and `Symbols.swift`. */
+    fun getSwiftUIHash(): String =
+        sha256(
+            buildString {
+                append(iconsSignature())
+                append("|namingConfig:").append(namingConfig.snapshotSignature())
+                append("|swiftUI:").append(swiftUIConfig.snapshotSignature())
+            }
+        )
+
+    /** Computes a deterministic hash covering the whole configuration. */
+    fun getConfigHash(): String =
+        sha256(getDownloadHash() + getComposeHash() + getSwiftUIHash() + outputDirectory.orNull)
+
+    private fun sha256(value: String): String {
         val digest = java.security.MessageDigest.getInstance("SHA-256")
-        return digest.digest(configString.toByteArray(Charsets.UTF_8)).joinToString("") {
+        return digest.digest(value.toByteArray(Charsets.UTF_8)).joinToString("") {
             "%02x".format(it)
         }
     }

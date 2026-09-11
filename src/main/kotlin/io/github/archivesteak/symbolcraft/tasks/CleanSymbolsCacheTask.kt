@@ -3,41 +3,37 @@ package io.github.archivesteak.symbolcraft.tasks
 import io.github.archivesteak.symbolcraft.utils.PathUtils
 import java.io.File
 import org.gradle.api.DefaultTask
+import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.Property
-import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.TaskAction
 
 /**
- * Task that deletes cached SVG assets created by [GenerateSymbolsTask].
+ * Deletes the SVG cache and the downloaded SVG workspace.
  *
- * Exposed to consumers as `cleanSymbolCraftCache`.
- *
- * This task is fully compatible with Gradle Configuration Cache.
+ * Exposed to consumers as `cleanSymbolCraftCache`. Compatible with the configuration cache.
  */
 abstract class CleanSymbolsCacheTask : DefaultTask() {
-    @get:Input abstract val cacheDirectory: Property<String>
+    @get:Internal abstract val cacheDirectory: Property<String>
 
-    @get:Input abstract val projectBuildDir: Property<String>
+    @get:Internal abstract val projectBuildDir: Property<String>
 
-    /** Deletes the configured cache directory. */
+    /** Workspace produced by `downloadSymbolCraftSvgs`. */
+    @get:Internal abstract val svgWorkspace: DirectoryProperty
+
+    /** Deletes the configured cache directory and the SVG workspace. */
     @TaskAction
     fun clean() {
-        val cacheDirPath = cacheDirectory.get()
-        val projectBuildDirPath = projectBuildDir.get()
-
-        // Resolve cache directory: support both absolute and relative paths
-        val cacheBaseDir = PathUtils.resolveCacheDirectory(cacheDirPath, projectBuildDirPath)
+        val cacheBaseDir =
+            PathUtils.resolveCacheDirectory(cacheDirectory.get(), projectBuildDir.get())
 
         logger.lifecycle("Cleaning SymbolCraft icon cache...")
         logger.lifecycle("Cache location: ${cacheBaseDir.absolutePath}")
 
+        var deletedCount = 0
+
         if (cacheBaseDir.exists()) {
             val svgCacheDir = File(cacheBaseDir, "svg-cache")
-            val tempSvgDir = File(cacheBaseDir, "temp-svgs")
-
-            var deletedCount = 0
-
-            // Clean SVG cache
             if (svgCacheDir.exists()) {
                 val fileCount = svgCacheDir.listFiles()?.size ?: 0
                 if (svgCacheDir.deleteRecursively()) {
@@ -49,24 +45,23 @@ abstract class CleanSymbolsCacheTask : DefaultTask() {
                     )
                 }
             }
-
-            // Clean temp SVGs
-            if (tempSvgDir.exists()) {
-                val tempFiles = tempSvgDir.listFiles()
-                deletedCount += tempFiles?.size ?: 0
-                tempSvgDir.deleteRecursively()
-                logger.lifecycle("   Cleaned temp SVGs: ${tempFiles?.size ?: 0} files")
-            }
-
-            // Clean the cache directory itself if empty
             if (cacheBaseDir.listFiles()?.isEmpty() == true) {
                 cacheBaseDir.delete()
                 logger.lifecycle("   Removed empty cache directory")
             }
-
-            logger.lifecycle("Total cache cleaned: $deletedCount files")
         } else {
             logger.lifecycle("No cache to clean (directory does not exist)")
         }
+
+        svgWorkspace.orNull?.asFile?.let { workspace ->
+            if (workspace.exists()) {
+                val fileCount = workspace.walkTopDown().count { it.isFile }
+                workspace.deleteRecursively()
+                deletedCount += fileCount
+                logger.lifecycle("   Cleaned SVG workspace: $fileCount files")
+            }
+        }
+
+        logger.lifecycle("Total cache cleaned: $deletedCount files")
     }
 }

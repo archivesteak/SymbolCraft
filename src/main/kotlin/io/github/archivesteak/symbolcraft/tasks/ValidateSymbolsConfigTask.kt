@@ -28,8 +28,11 @@ abstract class ValidateSymbolsConfigTask : DefaultTask() {
                     "(expected segments like 'com.example.icons')"
         }
 
-        if (ext.outputDirectory.get().isBlank()) {
-            problems += "outputDirectory cannot be blank"
+        if (ext.outputDirectory.orNull?.isBlank() == true) {
+            problems += "outputDirectory cannot be blank (leave it unset for the default)"
+        }
+        if (ext.composeSourceSet.orNull?.isBlank() == true) {
+            problems += "composeSourceSet cannot be blank (leave it unset for the default)"
         }
 
         val config = ext.getIconsConfig()
@@ -48,8 +51,9 @@ abstract class ValidateSymbolsConfigTask : DefaultTask() {
                 problems +=
                     "swiftUI.scaleFactor must be a positive, finite number (got $scaleFactor)"
             }
-            if (swiftUI.outputDirectory.get().isBlank()) {
-                problems += "swiftUI.outputDirectory cannot be blank when SwiftUI output is enabled"
+            if (swiftUI.outputDirectory.orNull?.isBlank() == true) {
+                problems +=
+                    "swiftUI.outputDirectory cannot be blank (leave it unset for the default)"
             }
         }
 
@@ -60,7 +64,7 @@ abstract class ValidateSymbolsConfigTask : DefaultTask() {
         }
 
         // An icon whose targets exclude Compose while SwiftUI output is disabled generates
-        // nothing at all — almost always a configuration mistake.
+        // nothing at all - almost always a configuration mistake.
         if (!swiftUI.enabled.get()) {
             val silentIcons =
                 config.filterValues { configs -> configs.all { IconTarget.COMPOSE !in it.targets } }

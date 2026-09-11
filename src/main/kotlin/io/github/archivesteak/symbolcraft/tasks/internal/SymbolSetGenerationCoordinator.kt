@@ -1,61 +1,64 @@
 package io.github.archivesteak.symbolcraft.tasks.internal
 
-import io.github.archivesteak.symbolcraft.converter.NameTransformerFactory
+import io.github.archivesteak.symbolcraft.converter.IconNameTransformer
 import io.github.archivesteak.symbolcraft.converter.SymbolSetGenerator
+import io.github.archivesteak.symbolcraft.model.IconConfig
 import io.github.archivesteak.symbolcraft.model.IconTarget
 import java.io.File
 import org.gradle.api.logging.Logger
 
 /**
+ * Everything the `.symbolset` generation needs, resolved by the owning task.
+ *
+ * @property config icon requests keyed by icon name
+ * @property svgDir downloaded SVG workspace (`<svgDir>/<libraryId>/<icon>.svg`), read only
+ * @property catalogDir asset catalog (or catalog child folder) receiving the `.symbolset` bundles
+ * @property swiftFile destination of the `Symbols.swift` helper, or null to skip it
+ */
+internal data class SymbolSetRequest(
+    val config: Map<String, List<IconConfig>>,
+    val svgDir: File,
+    val catalogDir: File,
+    val swiftFile: File?,
+    val nameTransformer: IconNameTransformer,
+    val scaleFactor: Double,
+)
+
+/**
  * Generates custom SF Symbol `.symbolset` bundles from the downloaded SVG directories.
  *
- * Runs after [SvgConversionCoordinator] and reuses the same temp SVG workspace, so enabling SwiftUI
- * output never triggers additional downloads. Intentionally decoupled from Gradle types apart from
- * the injected [Logger].
+ * Reuses the download task's SVG workspace, so enabling SwiftUI output never triggers additional
+ * downloads. Intentionally decoupled from Gradle types apart from the injected [Logger].
  */
 internal class SymbolSetGenerationCoordinator(private val logger: Logger) {
 
     /**
-     * Generates symbol sets for every library that produced SVGs, then writes the aggregated
-     * `Symbols.swift` helper when enabled.
+     * Generates symbol sets for every library that produced SVGs, writes the catalog manifest, and
+     * emits the aggregated `Symbols.swift` helper when requested.
      *
-     * @param context shared generation context holding output directories and DSL configuration
-     * @param iconsByLibrary mapping of library identifier -> icon names
+     * @return the number of generated symbol sets
      */
-    fun generate(context: GenerationContext, iconsByLibrary: Map<String, Set<String>>) {
-        val ext = context.extension
-        val swiftUI = ext.swiftUIConfig
-        val outputDir = context.swiftUIOutputDir ?: return
-
+    fun generate(request: SymbolSetRequest): Int {
         logger.lifecycle("Generating SwiftUI .symbolset bundles...")
 
         val generator = SymbolSetGenerator { message -> logger.lifecycle(message) }
+        val iconsByLibrary = IconLibraryClassifier.groupByLibrary(request.config)
 
-        val nameTransformer =
-            if (ext.namingConfig.transformer.isPresent) {
-                ext.namingConfig.transformer.get()
-            } else {
-                NameTransformerFactory.fromConvention(
-                    convention = ext.namingConfig.namingConvention.get(),
-                    suffix = ext.namingConfig.suffix.get(),
-                    prefix = ext.namingConfig.prefix.get(),
-                    removePrefix = ext.namingConfig.removePrefix.get(),
-                    removeSuffix = ext.namingConfig.removeSuffix.get(),
-                )
-            }
+        request.catalogDir.mkdirs()
+        File(request.catalogDir, "Contents.json").writeText(CATALOG_CONTENTS_JSON)
 
         val allSymbolSetNames = mutableListOf<String>()
         var totalGenerated = 0
 
-        iconsByLibrary.keys.forEach { libraryId ->
-            val libraryTempDir = context.tempDir.resolve(libraryId)
-            if (!libraryTempDir.exists() || libraryTempDir.listFiles()?.isEmpty() != false) {
+        iconsByLibrary.keys.sorted().forEach { libraryId ->
+            val libraryDir = request.svgDir.resolve(libraryId)
+            if (!libraryDir.exists() || libraryDir.listFiles()?.isEmpty() != false) {
                 logger.warn("No SVG files found for library: $libraryId (SwiftUI)")
                 return@forEach
             }
 
             val libraryConfigs =
-                context.config
+                request.config
                     .mapValues { (_, iconConfigs) ->
                         iconConfigs.filter {
                             it.libraryId == libraryId && IconTarget.SWIFTUI in it.targets
@@ -73,10 +76,10 @@ internal class SymbolSetGenerationCoordinator(private val logger: Logger) {
                     generator.generateLibrary(
                         libraryId = libraryId,
                         configs = libraryConfigs,
-                        libraryTempDir = libraryTempDir,
-                        outputDirectory = outputDir,
-                        nameTransformer = nameTransformer,
-                        scaleFactor = swiftUI.scaleFactor.get(),
+                        libraryTempDir = libraryDir,
+                        outputDirectory = request.catalogDir,
+                        nameTransformer = request.nameTransformer,
+                        scaleFactor = request.scaleFactor,
                     )
                 allSymbolSetNames += results.map { it.symbolSetName }
                 totalGenerated += results.size
@@ -92,32 +95,29 @@ internal class SymbolSetGenerationCoordinator(private val logger: Logger) {
             }
         }
 
-        if (swiftUI.generateSwiftEnum.get() && allSymbolSetNames.isNotEmpty()) {
-            val swiftSourceDir =
-                context.swiftUISourceDir
-                    ?: resolveSwiftSourceDir(
-                        configured = swiftUI.swiftSourceOutputDirectory.orNull,
-                        outputDir = outputDir,
-                        projectDir = ext.projectDir,
-                    )
-            if (swiftSourceDir != outputDir) {
-                logger.lifecycle(
-                    "   outputDirectory is inside an Xcode asset catalog; writing " +
-                        "Symbols.swift to ${swiftSourceDir.absolutePath}"
-                )
-            }
+        val swiftFile = request.swiftFile
+        if (swiftFile != null) {
             generator.generateSwiftEnumFile(
-                allSymbolSetNames,
-                swiftSourceDir,
-                swiftUI.scaleFactor.get(),
+                allSymbolSetNames.sorted(),
+                swiftFile.parentFile,
+                request.scaleFactor,
             )
-            logger.lifecycle("   Generated Symbols.swift (${allSymbolSetNames.size} symbols)")
+            logger.lifecycle(
+                "   Generated ${swiftFile.name} (${allSymbolSetNames.size} symbols) at ${swiftFile.absolutePath}"
+            )
         }
 
-        logger.lifecycle("Successfully generated $totalGenerated .symbolset bundles")
+        logger.lifecycle(
+            "Successfully generated $totalGenerated .symbolset bundles in ${request.catalogDir.absolutePath}"
+        )
+        return totalGenerated
     }
 
     companion object {
+        /** Manifest Xcode writes at the root of every asset catalog and catalog folder. */
+        internal const val CATALOG_CONTENTS_JSON =
+            "{\n  \"info\" : {\n    \"author\" : \"xcode\",\n    \"version\" : 1\n  }\n}\n"
+
         /**
          * Decides where `Symbols.swift` lands.
          *
@@ -126,8 +126,8 @@ internal class SymbolSetGenerationCoordinator(private val logger: Logger) {
          * dedicated `Assets.xcassets/SymbolCraft` child), the Swift source must not go there: Xcode
          * treats asset catalogs as leaves, so neither the Swift compiler nor synchronized
          * file-system groups ever see sources stored inside. In that case the catalog's parent
-         * directory is used. Plain-folder output keeps the historical behavior of writing
-         * `Symbols.swift` next to the `.symbolset` bundles.
+         * directory is used. Plain-folder output keeps `Symbols.swift` next to the `.symbolset`
+         * bundles.
          */
         internal fun resolveSwiftSourceDir(
             configured: String?,

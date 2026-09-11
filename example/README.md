@@ -1,289 +1,132 @@
 # SymbolCraft Example Application
 
-This is a complete Kotlin Multiplatform example application demonstrating the usage of the **SymbolCraft** Gradle plugin.
+A Kotlin Multiplatform app in the layout the KMP wizard generates for "shared logic + native UI",
+demonstrating the **SymbolCraft** Gradle plugin on every platform.
 
 ## Overview
 
-This example showcases:
-- **Multi-platform support**: Android, iOS, and Desktop (JVM)
-- **Icon generation**: Using SymbolCraft to generate icons from multiple sources
-- **Material Symbols**: Various weights, variants, and fill states
-- **External icon libraries**: MDI, esm.sh Material Symbols, and Simple Icons
-- **Local SVG files**: Checked-in project icons from Compose resources
-- **Compose Preview**: Generated preview functions for all icons
-- **SwiftUI output**: Custom SF Symbol `.symbolset` bundles + `Symbols.swift` in `iosApp/GeneratedSymbols`
-- **Modern configuration**: Using the latest SymbolCraft DSL features
+- **`shared`** — Kotlin logic (`Greeting`) and the **icon declaration**. SymbolCraft is applied
+  here. Xcode embeds this module as the `Shared` framework.
+- **`composeApp`** — Compose UI for Android and Desktop. Gets the generated `ImageVector`s
+  through its dependency on `:shared`.
+- **`iosApp`** — native SwiftUI app. Uses the generated `SymbolCraft.xcassets` catalog and
+  `Symbols.swift` (`Image(symbol: .homeOutlined)`).
+
+Icons come from Material Symbols (weights, variants, fills), external URL templates (MDI,
+esm.sh Material Symbols, Simple Icons) and checked-in local SVGs (`shared/icons/`).
 
 ## Version Baseline
 
-- **SymbolCraft**: 0.7.0
+- **SymbolCraft**: 0.8.0 (included build of the parent directory)
 - **Compose Multiplatform**: 1.11.1
 - **Kotlin**: 2.3.21
-- **Preview annotation**: `androidx.compose.ui.tooling.preview.Preview`
 
 ## Project Structure
 
 ```
 example/
-├── composeApp/                    # Shared Compose Multiplatform app
-│   ├── src/
-│   │   ├── commonMain/           # Common code for all platforms
-│   │   │   ├── generated/
-│   │   │   │   └── symbols/      # SymbolCraft output source root
-│   │   │   └── kotlin/
-│   │   │       └── App.kt        # Main app composable
-│   │   ├── androidMain/          # Android-specific code
-│   │   ├── iosMain/              # iOS-specific code
-│   │   └── jvmMain/              # Desktop-specific code
-│   └── build.gradle.kts          # SymbolCraft configuration
-└── iosApp/                        # iOS app wrapper
-    └── GeneratedSymbols/          # .symbolset bundles + Symbols.swift (SwiftUI output)
+├── shared/                          # Icon declaration + shared logic, embedded by Xcode
+│   ├── build.gradle.kts             # symbolCraft { ... }
+│   ├── icons/                       # local SVGs (localIcons("local-test"))
+│   ├── src/commonMain/kotlin/       # Greeting.kt
+│   └── build/generated/symbolcraft/ # generated output (not committed)
+│       ├── compose/                 # ImageVectors, joined to the composeMain source set
+│       └── swiftui/
+│           ├── SymbolCraft.xcassets # .symbolset bundles
+│           └── Symbols.swift        # GeneratedSymbol enum + Image(symbol:)
+├── composeApp/                      # Compose UI (Android + Desktop), depends on :shared
+└── iosApp/                          # SwiftUI app; references the two generated files above
 ```
 
-## SymbolCraft Configuration
+## How the outputs reach each platform
 
-The example demonstrates various configuration options in `composeApp/build.gradle.kts`:
-
-```kotlin
-kotlin {
-    sourceSets {
-        commonMain {
-            kotlin.srcDir("src/commonMain/generated/symbols")
-        }
-    }
-}
-
-symbolCraft {
-    // Output directory for generated icons
-    outputDirectory.set("src/commonMain/generated/symbols")
-    packageName.set("io.github.archivesteak.example")
-    generatePreview.set(true)
-
-    // Icon naming configuration
-    naming {
-        pascalCase()  // Use PascalCase convention
-    }
-
-    // SwiftUI output (custom SF Symbols for the iOS app)
-    swiftUI {
-        enabled.set(true)
-        outputDirectory.set("iosApp/GeneratedSymbols")
-    }
-
-    // Material Symbols examples
-    materialSymbol("search") {
-        standardWeights() // Adds 400, 500, 700 weights
-    }
-
-    materialSymbol("home") {
-        weights(400, 500, variant = SymbolVariant.ROUNDED)
-        bothFills(weight = 400) // Both filled and unfilled
-    }
-
-    materialSymbol("person") {
-        allVariants(weight = SymbolWeight.W500) // All variants
-    }
-
-    materialSymbol("settings") {
-        style(weight = 400, variant = SymbolVariant.OUTLINED)
-        style(weight = 500, variant = SymbolVariant.ROUNDED, fill = SymbolFill.FILLED)
-    }
-
-    // External icons from MDI
-    externalIcons(*listOf("abacus", "ab-testing").toTypedArray(), libraryName = "mdi") {
-        urlTemplate = "https://esm.sh/@mdi/svg@latest/svg/{name}.svg"
-    }
-
-    // External icons with style variants
-    externalIcons(*listOf("home", "search", "person", "settings", "arrow_back").toTypedArray(), 
-                  libraryName = "official") {
-        urlTemplate = "https://esm.sh/@material-symbols/svg-400@latest/rounded/{name}{fill}.svg"
-        styleParam("fill") {
-            values("", "-fill")  // unfilled, filled variants
-        }
-    }
-
-    // Local SVG files stored in the project
-    localIcons("local-test") {
-        directory = project.relativePath("src/commonMain/composeResources/files")
-        include("**/*.svg")
-    }
-
-    // Simple Icons
-    externalIcons("github", libraryName = "simple-icons") {
-        urlTemplate = "https://simpleicons.org/icons/{name}.svg"
-    }
-}
-```
+- **Android / Desktop**: `shared/build.gradle.kts` sets `composeSourceSet.set("composeMain")`, an
+  intermediate source set shared by the Android and JVM compilations only, so the iOS framework
+  never contains Compose. Compiling `:shared` runs `generateSymbolCraftIcons` first.
+- **iOS**: the Xcode target's "Compile Kotlin Framework" phase runs
+  `./gradlew :shared:embedAndSignAppleFrameworkForXcode`, which depends on
+  `generateSymbolCraftSymbolSets`. The Xcode project references
+  `../shared/build/generated/symbolcraft/swiftui/SymbolCraft.xcassets` and `Symbols.swift` and
+  declares both as Output Files of that script phase.
 
 ## Getting Started
 
 ### Prerequisites
 
 - **JDK 17** or higher
-- **Android Studio** (for Android development)
-- **Xcode** (for iOS development, macOS only)
-- **Gradle 8.0+** (included via wrapper)
+- **Android SDK** (for the Android app)
+- **Xcode 16** (for iOS, macOS only)
 
-### Step 1: Generate Icons
-
-Before building the app, generate the icons:
+### Generate icons
 
 ```bash
-./gradlew generateSymbolCraftIcons
+./gradlew :shared:generateSymbolCraftIcons :shared:generateSymbolCraftSymbolSets
 ```
 
-This will:
-- Download SVG files from configured sources
-- Convert them to Compose ImageVectors
-- Generate Kotlin files in `composeApp/src/commonMain/generated/symbols/`
+Builds do this on their own; the explicit run is useful to inspect the output.
 
-### Step 2: Build and Run
-
-#### Android
+### Run
 
 ```bash
-# Build debug APK
-./gradlew :composeApp:assembleDebug
-
-# Or run directly on connected device/emulator
-./gradlew :composeApp:installDebug
+./gradlew :composeApp:run              # Desktop
+./gradlew :composeApp:assembleDebug    # Android APK
+./gradlew :composeApp:installDebug     # Android device/emulator
+open iosApp/iosApp.xcodeproj           # iOS: pick a simulator, Run
 ```
 
-You can also open the project in Android Studio and run from there.
-
-#### Desktop (JVM)
+From the terminal on macOS, the same build CI runs:
 
 ```bash
-./gradlew :composeApp:run
+cd iosApp
+xcodebuild -project iosApp.xcodeproj -target iosApp -configuration Debug -sdk iphonesimulator \
+  CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
 ```
 
-#### iOS
+## Using Generated Icons
 
-1. Open `iosApp/iosApp.xcodeproj` in Xcode
-2. Select a simulator or device
-3. Click Run (⌘R)
+Compose (any module depending on `:shared`):
 
-Alternatively, from the terminal:
-```bash
-# Open in Xcode
-open iosApp/iosApp.xcodeproj
+```kotlin
+import io.github.archivesteak.example.icons.materialsymbols.Icons as MaterialSymbols
+import io.github.archivesteak.example.icons.materialsymbols.icons.SearchW400Outlined
+import io.github.archivesteak.example.icons.official.Icons as OfficialIcons
+
+Icon(imageVector = SearchW400Outlined, contentDescription = "Search")
+Icon(imageVector = MaterialSymbols.HomeW400OutlinedFill, contentDescription = "Home")
+Icon(imageVector = OfficialIcons.HomeFill, contentDescription = "Official home")
 ```
 
-## Platform-Specific Notes
+SwiftUI (`iosApp/iosApp/ContentView.swift`):
 
-### Android
-- **Min SDK**: 24
-- **Target SDK**: 36
-- **Compile SDK**: 36
-
-### iOS
-- **Deployment Target**: iOS 15.0+
-- **Requires**: Xcode 14.0 or later
-- **Architecture**: arm64 (device), arm64 simulator
-
-### Desktop
-- **JVM Target**: 17
-- **Supported OS**: Windows, macOS, Linux
+```swift
+Image(symbol: .homeOutlined)
+GeneratedSymbol.homeOutlined.image(boxSize: 24)
+List(GeneratedSymbol.allCases, id: \.self) { Image(symbol: $0) }
+```
 
 ## Development Tasks
 
-### Common Gradle Tasks
-
 ```bash
-# Generate icons
-./gradlew generateSymbolCraftIcons
-
-# Clean generated icons
-./gradlew cleanSymbolCraftIcons
-
-# Clean icon cache
-./gradlew cleanSymbolCraftCache
-
-# Validate configuration
-./gradlew validateSymbolCraftConfig
-
-# Clean everything
-./gradlew clean
-
-# Build all platforms
+./gradlew :shared:validateSymbolCraftConfig
+./gradlew :shared:cleanSymbolCraftIcons
+./gradlew :shared:cleanSymbolCraftCache
 ./gradlew build
 ```
 
 ### Troubleshooting
 
-**Problem**: Icons not found after generation  
-**Solution**: Run `./gradlew clean` then `./gradlew generateSymbolCraftIcons`
-
-**Problem**: Build fails with missing imports  
-**Solution**: Ensure icons are generated before building: `./gradlew generateSymbolCraftIcons`
-
-**Problem**: iOS build fails  
-**Solution**: Run `./gradlew clean` and regenerate the iOS framework
-
-## Using Generated Icons
-
-Generated icons can be used in Compose like this:
-
-```kotlin
-import androidx.compose.material3.Icon
-import androidx.compose.runtime.Composable
-import io.github.archivesteak.example.icons.materialsymbols.Icons as MaterialSymbols
-import io.github.archivesteak.example.icons.materialsymbols.icons.HomeW400OutlinedFill
-import io.github.archivesteak.example.icons.materialsymbols.icons.SearchW400Outlined
-import io.github.archivesteak.example.icons.mdi.Icons as MdiIcons
-import io.github.archivesteak.example.icons.mdi.icons.AbacusMdi
-import io.github.archivesteak.example.icons.official.Icons as OfficialIcons
-import io.github.archivesteak.example.icons.official.icons.HomeFill
-
-@Composable
-fun MyScreen() {
-    // Material Symbols direct import
-    Icon(
-        imageVector = SearchW400Outlined,
-        contentDescription = "Search"
-    )
-
-    // Filled Material Symbols use Fill in 0.5.0+
-    Icon(
-        imageVector = HomeW400OutlinedFill,
-        contentDescription = "Home filled"
-    )
-
-    // Material Symbols accessor object
-    Icon(
-        imageVector = MaterialSymbols.HomeW400OutlinedFill,
-        contentDescription = "Home filled"
-    )
-
-    // External library accessor object
-    Icon(
-        imageVector = MdiIcons.AbacusMdi,
-        contentDescription = "Abacus"
-    )
-
-    // External variants from styleParam()
-    Icon(
-        imageVector = OfficialIcons.HomeFill,
-        contentDescription = "Official home filled"
-    )
-}
-```
-
-## Preview Support
-
-The example enables preview generation with `generatePreview.set(true)`. You can view icon previews:
-
-1. Open generated icon files in Android Studio/IntelliJ IDEA
-2. Look for `@Preview` annotated functions
-3. Click the "Preview" panel on the right side
-4. View rendered icons directly in the IDE
+- **Unresolved icon reference in composeApp** — run `./gradlew :shared:generateSymbolCraftIcons`
+  and check the output under `shared/build/generated/symbolcraft/compose`.
+- **Xcode: "Build input file cannot be found"** — the generated files must stay listed as Output
+  Files of the "Compile Kotlin Framework" phase (see `project.pbxproj`).
+- **iOS build fails in the script phase** — run the Gradle task by hand for the full log:
+  `./gradlew :shared:generateSymbolCraftSymbolSets --stacktrace`.
 
 ## Learn More
 
 - [SymbolCraft Documentation](../README.md)
-- [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html)
-- [Compose Multiplatform](https://www.jetbrains.com/lp/compose-multiplatform/)
+- [Kotlin Multiplatform](https://kotlinlang.org/docs/multiplatform/get-started.html)
+- [Direct integration with Xcode](https://kotlinlang.org/docs/multiplatform/multiplatform-direct-integration.html)
 - [Material Symbols](https://fonts.google.com/icons)
 
 ## License

@@ -2,23 +2,38 @@
 
 ## Project Overview
 
-**SymbolCraft** is a Gradle plugin for Kotlin Multiplatform projects that generates icons on-demand from multiple icon libraries (Material Symbols, Bootstrap Icons, Heroicons, etc.).
+**SymbolCraft** is a Gradle plugin for Kotlin Multiplatform projects that generates icons on-demand from multiple icon libraries (Material Symbols, Bootstrap Icons, Heroicons, etc.) as Compose `ImageVector` sources and as custom SF Symbol `.symbolset` catalogs for native SwiftUI.
 
-- **Version**: v0.7.0
+- **Version**: v0.8.0
 - **Status**: Published to GitHub Packages (fork of [kingsword09/SymbolCraft](https://github.com/kingsword09/SymbolCraft), not on Maven Central / Plugin Portal)
 - **Language**: Kotlin 2.0.0
 - **Minimum Gradle version**: 8.0+
 - **Repository**: https://github.com/archivesteak/SymbolCraft
 
+### Design in one paragraph
+
+The plugin is applied to **the module both platform builds compile** (the shared Kotlin module in a
+native-UI KMP app, the Compose module in a shared-UI app). Three cacheable tasks share one SVG
+workspace: `downloadSymbolCraftSvgs` -> `generateSymbolCraftIcons` (Compose) and
+`generateSymbolCraftSymbolSets` (SwiftUI). All outputs live in the applying project's `build/`.
+Consumption is wired by build mechanics, not by paths: the Compose output joins a Kotlin source set
+of the same project (or is shared to another project as a Gradle variant), and the symbol catalog
+is a dependency of the Kotlin Gradle plugin's `embedAndSign*AppleFrameworkForXcode` tasks, so the
+Gradle run Xcode already makes produces it. The Xcode project references the two generated files
+and declares them as outputs of the Kotlin run-script phase. v0.8.0 replaced the previous design,
+in which one task in the Compose UI module wrote into a sibling iOS app folder and was triggered
+only by that module's Kotlin compilation — the iOS build could never regenerate its own assets.
+
 ### Core Features
 
-- **Multiple icon libraries** - Material Symbols, Bootstrap Icons, Heroicons, custom URL templates
-- **SwiftUI output** - Generate custom SF Symbol `.symbolset` bundles from the same SVGs (real per-weight glyphs mapped to SF weight columns)
-- **Per-icon platform targeting** - `swiftUIOnly()` / `composeOnly()` per icon declaration, keeping Apple-only icons (e.g. `airplay`) out of Compose sources and vice versa
-- **Smart caching** - 7-day SVG cache, supports relative/absolute paths
-- **Parallel downloads** - Kotlin coroutines with configurable retry mechanism
+- **Multiple icon libraries** - Material Symbols, Bootstrap Icons, Heroicons, custom URL templates, local SVGs
+- **SwiftUI output** - Custom SF Symbol `.symbolset` catalog from the same SVGs (real per-weight glyphs mapped to SF weight columns) plus `Symbols.swift`
+- **Per-icon platform targeting** - `swiftUIOnly()` / `composeOnly()` per icon declaration
+- **Variant-aware sharing** - `io.github.archivesteak.symbolcraft.compose` / `.apple` consumer plugins for multi-module layouts
+- **Smart caching** - 7-day SVG cache, relative/absolute cache paths, three `@CacheableTask`s
+- **Parallel downloads** - Kotlin coroutines with configurable retry mechanism; missing icons fail the build by name
 - **Deterministic builds** - Git-friendly deterministic code generation
-- **Flexible naming** - Multiple naming conventions (PascalCase, camelCase, snake_case, etc.)
+- **Flexible naming** - PascalCase, camelCase, snake_case, kebab-case, custom transformers
 - **Compose Previews** - Auto-generate @Preview functions
 
 ---
@@ -28,10 +43,14 @@
 | Technology | Version | Purpose |
 |------------|---------|---------|
 | Kotlin | 2.0.0 | Core language |
-| Gradle | 8.0+ | Build system |
+| Gradle | 8.0+ (wrapper 8.10.2) | Build system |
 | Kotlin Coroutines | 1.8.1 | Parallel downloads |
 | Ktor Client | 2.3.12 | HTTP client |
 | svg-to-compose | 0.1.0 | SVG conversion library (io.github.kingsword09 fork of DevSrSouza/svg-to-compose) |
+
+`kotlin-gradle-plugin` is a `compileOnly` dependency but **no plugin class references Kotlin plugin
+types**: Kotlin/Android source sets are reached reflectively (see `ComposeSourceWiring`), because
+those plugins may sit on a different class loader than SymbolCraft.
 
 ---
 
@@ -39,64 +58,48 @@
 
 ```
 SymbolCraft/
-├── build.gradle.kts                    # Plugin build configuration
-├── gradle.properties                   # Gradle configuration
-├── settings.gradle.kts                 # Gradle settings
-├── gradle/
-│   └── libs.versions.toml              # Version catalog
+├── build.gradle.kts                    # Plugin build: three plugin ids, publishing
+├── gradle/libs.versions.toml           # Version catalog
 │
 ├── src/main/kotlin/io/github/archivesteak/symbolcraft/
-│   ├── SymbolCraftDefaults.kt          # Shared constants and default values
+│   ├── SymbolCraftDefaults.kt          # Constants: default output paths, task group, file header
 │   │
-│   ├── plugin/                         # Gradle plugin core
-│   │   ├── SymbolCraftPlugin.kt        # Plugin entry point, task registration
-│   │   ├── SymbolCraftExtension.kt     # DSL configuration interface
-│   │   ├── SwiftUIConfig.kt            # SwiftUI (.symbolset) output configuration
-│   │   ├── NamingConfig.kt             # Naming configuration
-│   │   └── samples/
-│   │       └── LocalIconsSamples.kt    # DSL usage samples
+│   ├── plugin/
+│   │   ├── SymbolCraftPlugin.kt        # Producer plugin: extension, tasks, variants, local wiring
+│   │   ├── SymbolCraftComposePlugin.kt # Consumer plugin `.compose` (+ symbolCraftCompose { } DSL)
+│   │   ├── SymbolCraftApplePlugin.kt   # Consumer plugin `.apple`
+│   │   ├── SymbolCraftVariants.kt      # Consumable/resolvable configurations + attributes
+│   │   ├── ComposeSourceWiring.kt      # Adds generated sources to a Kotlin/Android source set (reflective)
+│   │   ├── XcodeTasks.kt               # Matches embedAndSign*AppleFrameworkForXcode / syncFramework
+│   │   ├── SymbolCraftExtension.kt     # symbolCraft { } DSL, config hashes
+│   │   ├── SwiftUIConfig.kt            # swiftUI { } DSL
+│   │   ├── NamingConfig.kt             # naming { } DSL
+│   │   └── samples/LocalIconsSamples.kt
 │   │
-│   ├── tasks/                          # Gradle tasks
-│   │   ├── GenerateSymbolsTask.kt      # Core generation task (@CacheableTask)
-│   │   ├── CleanSymbolsCacheTask.kt    # Cache cleanup task
-│   │   ├── CleanSymbolsIconsTask.kt    # Generated-files cleanup task
-│   │   ├── ValidateSymbolsConfigTask.kt # Configuration validation task
+│   ├── tasks/
+│   │   ├── DownloadSymbolSvgsTask.kt   # @CacheableTask: SVG workspace (build/symbolcraft/svgs)
+│   │   ├── GenerateComposeIconsTask.kt # @CacheableTask: Compose sources
+│   │   ├── GenerateSymbolSetsTask.kt   # @CacheableTask: SymbolCraft.xcassets + Symbols.swift
+│   │   ├── CleanSymbolsCacheTask.kt
+│   │   ├── CleanSymbolsIconsTask.kt
+│   │   ├── ValidateSymbolsConfigTask.kt
 │   │   └── internal/                   # Pipeline collaborators (no Gradle task API)
-│   │       ├── GenerationContextFactory.kt  # Builds the immutable GenerationContext
-│   │       ├── PreGenerationCleaner.kt      # Removes stale generated files + cache pruning
-│   │       ├── DownloadCoordinator.kt       # Parallel SVG download orchestration
-│   │       ├── DownloadModels.kt            # Download telemetry models
-│   │       ├── IconLibraryClassifier.kt     # Groups configs by library id
-│   │       ├── SvgConversionCoordinator.kt  # SVG -> Compose conversion orchestration
-│   │       └── SymbolSetGenerationCoordinator.kt # .symbolset + Symbols.swift orchestration
+│   │       ├── DownloadCoordinator.kt / DownloadModels.kt
+│   │       ├── SvgConversionCoordinator.kt   # ComposeConversionRequest -> Kotlin sources
+│   │       ├── SymbolSetGenerationCoordinator.kt # SymbolSetRequest -> catalog (+ resolveSwiftSourceDir)
+│   │       ├── GeneratedFileCleaner.kt       # Header-guarded deletion of previous outputs
+│   │       ├── IconLibraryClassifier.kt
+│   │       └── Naming.kt                     # NamingConfig.toTransformer()
 │   │
-│   ├── download/                       # Download module
-│   │   └── SvgDownloader.kt            # Smart SVG downloader (parallel coroutines + retry)
-│   │
-│   ├── converter/                      # Conversion module
-│   │   ├── Svg2ComposeConverter.kt     # SVG to Compose converter
-│   │   ├── SymbolSetGenerator.kt       # SVG to .symbolset (custom SF Symbols) generator
-│   │   ├── IconNameTransformer.kt      # Icon naming transformer
-│   │   └── NameTransformerFactory.kt   # Naming convention factory
-│   │
-│   ├── model/                          # Data models
-│   │   └── IconConfig.kt               # Icon configuration interface and implementations
-│   │
-│   └── utils/                          # Utilities
-│       └── PathUtils.kt                # Path utilities
+│   ├── download/SvgDownloader.kt       # Parallel coroutine downloader + TTL cache
+│   ├── converter/                      # Svg2ComposeConverter, SymbolSetGenerator, IconNameTransformer
+│   ├── model/IconConfig.kt             # IconConfig, IconTarget(s), Material/External/Local configs
+│   └── utils/PathUtils.kt
 │
-├── example/                            # Example project (Compose Multiplatform)
-│   ├── composeApp/                     # Main application
-│   │   ├── src/
-│   │   │   ├── androidMain/           # Android platform code
-│   │   │   ├── iosMain/               # iOS platform code
-│   │   │   ├── jvmMain/               # Desktop platform code
-│   │   │   └── commonMain/            # Common code
-│   │   │       ├── generated/symbols/ # Generated icons source root
-│   │   │       ├── kotlin/
-│   │   │       └── composeResources/
-│   │   └── build.gradle.kts            # Uses the SymbolCraft plugin
-│   └── iosApp/                         # iOS app
+├── example/                            # KMP app, native-UI layout (see example/README.md)
+│   ├── shared/                         # Icon declaration + logic; Xcode embeds it as `Shared`
+│   ├── composeApp/                     # Compose UI, Android + Desktop, depends on :shared
+│   └── iosApp/                         # SwiftUI app referencing the generated catalog
 │
 ├── reference/                          # Development reference material (gitignored, not shipped)
 ├── README.md                           # User documentation
@@ -107,284 +110,145 @@ SymbolCraft/
 
 ## Core Components
 
-### 1. **SymbolCraftPlugin** (plugin entry point)
+### 1. **SymbolCraftPlugin** (producer, id `io.github.archivesteak.symbolcraft`)
+
 **Location**: `src/main/kotlin/io/github/archivesteak/symbolcraft/plugin/SymbolCraftPlugin.kt`
 
-**Responsibilities**:
-- Registers the `symbolCraft` DSL extension
-- Registers Gradle tasks:
-  - `generateSymbolCraftIcons` - Generate all configured icons
-  - `cleanSymbolCraftCache` - Clean the SVG cache
-  - `cleanSymbolCraftIcons` - Clean generated icon files
-  - `validateSymbolCraftConfig` - Validate configuration
-- Automatically adds task dependencies: icons are generated before Kotlin compilation.
-  Wiring is **type-based**: once any Kotlin-capable plugin is applied (`org.jetbrains.kotlin.jvm` /
-  `multiplatform` / `android`, `com.android.application` / `library` /
-  `com.android.kotlin.multiplatform.library`), every `KotlinCompileTool` task depends on the
-  generation task. This covers AGP built-in Kotlin / KMP compile tasks like `compileAndroidMain`
-  whose names contain no "Kotlin" — name matching alone missed them. The task type is loaded
-  reflectively (`Class.forName`) because kotlin-gradle-plugin is `compileOnly` and a static
-  reference breaks plugin application/class decoration in non-Kotlin projects. A lazy name-based
-  fallback (`compile*Kotlin*`) remains as backup; generated icons are Kotlin sources, so no
-  asset/resource task wiring is needed (or wanted).
+- Registers the `symbolCraft` extension and the tasks below.
+- Resolves output locations lazily (providers, no `afterEvaluate`): unset DSL values fall back to
+  `build/…`, relative values resolve against the project directory.
+- `SymbolCraftVariants.registerProducer` exposes two consumable configurations:
+  `symbolCraftComposeSourcesElements` (artifact = Compose output dir) and
+  `symbolCraftAppleSymbolsElements` (artifact = catalog dir). Attributes: `Category = symbolcraft`
+  plus `io.github.archivesteak.symbolcraft.output = compose-sources | apple-symbols`. The `Category`
+  attribute keeps `apiElements`/`runtimeElements` of a Kotlin producer out of the match.
+- Same-project wiring: `ComposeSourceWiring.wire(...)` adds the Compose output provider to
+  `composeSourceSet` after evaluation; `XcodeTasks.dependOnForEmbed` makes every Xcode embed task
+  depend on the symbol-set task.
 
-**Key code**:
-```kotlin
-class SymbolCraftPlugin : Plugin<Project> {
-    override fun apply(project: Project) {
-        val extension = project.extensions.create("symbolCraft", SymbolCraftExtension::class.java)
+**Tasks**
 
-        val generateTask = project.tasks.register("generateSymbolCraftIcons", GenerateSymbolsTask::class.java) {
-            // Configure task...
-        }
+| Task | Type | Inputs | Outputs |
+|---|---|---|---|
+| `downloadSymbolCraftSvgs` | `DownloadSymbolSvgsTask` | `getDownloadHash()`, local SVG contents | `build/symbolcraft/svgs/<libraryId>/` |
+| `generateSymbolCraftIcons` | `GenerateComposeIconsTask` | `getComposeHash()`, SVG workspace | `build/generated/symbolcraft/compose/` (or `outputDirectory`) |
+| `generateSymbolCraftSymbolSets` | `GenerateSymbolSetsTask` | `getSwiftUIHash()`, SVG workspace | `…/swiftui/SymbolCraft.xcassets/` (`@OutputDirectory`) + `Symbols.swift` (`@Optional @OutputFile`); `onlyIf(swiftUI.enabled)` |
+| `cleanSymbolCraftIcons` / `cleanSymbolCraftCache` / `validateSymbolCraftConfig` | | | |
 
-        // Type-based wiring: every Kotlin compile task depends on generation
-        kotlinCapablePluginIds.forEach { id ->
-            project.plugins.withId(id) { plugin ->
-                val type = Class.forName(
-                    "org.jetbrains.kotlin.gradle.tasks.KotlinCompileTool",
-                    true, plugin.javaClass.classLoader,
-                )
-                project.tasks.withType(type).configureEach { it.dependsOn(generateTask) }
-            }
-        }
-    }
-}
-```
+Rules worth keeping:
+- **Never declare a shared user folder as `@OutputDirectory`.** `Symbols.swift` is an
+  `@OutputFile`; the catalog parent (an app source folder in committed mode) is not an output.
+  Gradle disables caching for a task whose output directory contains foreign files, and a
+  build-cache restore cleans output directories.
+- The generators never write into the download task's workspace; Compose filtering stages into the
+  task's `temporaryDir`.
+- Every generated source starts with `SymbolCraftDefaults.GENERATED_FILE_HEADER`; cleaners refuse
+  to delete files without it.
 
----
+### 2. **Consumer plugins**
 
-### 2. **SymbolCraftExtension** (DSL configuration)
-**Location**: `src/main/kotlin/.../plugin/SymbolCraftExtension.kt`
+- `SymbolCraftComposePlugin` (`io.github.archivesteak.symbolcraft.compose`): creates the
+  `symbolCraft` dependency bucket and the resolvable `symbolCraftComposeSources`, then wires it as
+  a source directory (`symbolCraftCompose { sourceSet }`, default `commonMain`/`main`). A resolved
+  configuration is a file collection carrying the producer task as a dependency, so Kotlin
+  compilation waits for generation without any cross-project task reference (Isolated-Projects
+  safe).
+- `SymbolCraftApplePlugin` (`io.github.archivesteak.symbolcraft.apple`): resolvable
+  `symbolCraftAppleSymbols`; every Xcode embed task of the project depends on it.
 
-**Responsibilities**:
-- Provides a user-friendly DSL API
-- Manages configuration for multiple icon libraries (Material Symbols, external libraries, local SVGs)
-- Convenience configuration methods:
-  - `materialSymbol()` / `materialSymbols()` - Configure Material Symbols icons
-  - `externalIcon()` / `externalIcons()` - Configure external library icons
-  - `localIcons()` - Configure checked-in local SVG files
-  - `swiftUI {}` - Configure SwiftUI `.symbolset` output (see component 9)
-  - `naming {}` - Configure naming rules
-- Every icon builder also supports **per-icon platform targeting**: `swiftUIOnly()` / `composeOnly()`
-  (or a `targets: Set<IconTarget>` property). Applied to all styles of that builder at build time, so
-  call order does not matter. Default is `IconTargets.ALL` (both platforms).
+### 3. **ComposeSourceWiring** (reflective source-set access)
 
-**Configuration options**:
-```kotlin
-abstract class SymbolCraftExtension {
-    abstract val packageName: Property<String>              // Package name
-    abstract val outputDirectory: Property<String>          // Output directory
-    abstract val cacheEnabled: Property<Boolean>            // Cache toggle
-    abstract val cacheDirectory: Property<String>           // Cache directory
-    abstract val generatePreview: Property<Boolean>         // Generate previews
-    abstract val maxRetries: Property<Int>                  // Max retry attempts
-    abstract val retryDelayMs: Property<Long>               // Retry delay
+Runs after project evaluation (the DSL must be complete to know the source set name). Looks for the
+`kotlin` extension first (KGP, KMP, AGP's KMP library plugin), then `android` (AGP built-in
+Kotlin), calls `getSourceSets().findByName(name).getKotlin()` reflectively and `srcDir(sources)`.
+Default source set: `commonMain` when `org.jetbrains.kotlin.multiplatform` or
+`com.android.kotlin.multiplatform.library` is applied, else `main`. Fails with the list of existing
+source sets when the configured name does not exist.
 
-    val namingConfig: NamingConfig                          // Naming configuration
-    val swiftUIConfig: SwiftUIConfig                        // SwiftUI output configuration
+### 4. **XcodeTasks**
 
-    // Builder classes
-    // MaterialSymbolsBuilder - Material Symbols configuration
-    // ExternalIconBuilder - External icon configuration
-    // LocalIconsBuilder - Local SVG configuration
-}
-```
+Matches `embedAndSign*AppleFrameworkForXcode`, `syncFramework` (CocoaPods) and
+`embedSwiftExportForXcode` by name with `tasks.configureEach`, the same approach Compose
+Multiplatform resources use. Covers both entry points: Xcode's run-script phase and IDE-driven
+builds (`OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES`), which run the embed task through Gradle.
 
----
+### 5. **SymbolCraftExtension** (DSL)
 
-### 3. **GenerateSymbolsTask** (core generation task)
-**Location**: `src/main/kotlin/.../tasks/GenerateSymbolsTask.kt`
+- `outputDirectory` (unset = `build/generated/symbolcraft/compose`), `composeSourceSet` (unset =
+  derived), `packageName`, `generatePreview`, `previewAnnotationClass`, cache and retry settings.
+- `naming { }`, `swiftUI { }` (`enabled` default false, `outputDirectory` unset = build catalog,
+  `scaleFactor`, `generateSwiftEnum`, `swiftSourceOutputDirectory`).
+- Icon builders: `materialSymbol(s)`, `externalIcon(s)`, `localIcons`, `iconConfig(s)`; all
+  support `swiftUIOnly()` / `composeOnly()`.
+- Hashes: `getDownloadHash()` (icons + targets), `getComposeHash()`, `getSwiftUIHash()`; each task
+  declares only the hash it depends on.
 
-**Responsibilities**:
-- Parses user configuration (Material Symbols + external libraries + local icons)
-- Downloads SVG files in parallel (Kotlin coroutines)
-- Applies naming transformation rules
-- Invokes the converter to generate Compose ImageVector code
-- Optionally invokes the `.symbolset` generator when SwiftUI output is enabled
-- Manages caching and incremental builds
-- Cleans unused cache files (relative-path caches)
+### 6. **Pipeline collaborators** (`tasks/internal`)
 
-**Features**:
-- `@CacheableTask` - Supports Gradle task caching
-- Configuration-cache compatible - Uses the Provider API, avoids accessing Project at execution time
-- Smart cache cleanup - Enabled for relative paths, skipped for absolute paths
-- Configurable retry - maxRetries and retryDelayMs
+- `DownloadCoordinator`: parallel remote fetch / local copy into `<workspace>/<libraryId>/`;
+  returns `DownloadStats`; the task throws when any result is `Failed`.
+- `SvgConversionCoordinator.convert(ComposeConversionRequest)`: per-library conversion, COMPOSE
+  target filtering (staging dir), `Svg2ComposeConverter`.
+- `SymbolSetGenerationCoordinator.generate(SymbolSetRequest)`: writes the catalog root
+  `Contents.json`, per-library `.symbolset` bundles (SWIFTUI targets), `Symbols.swift`.
+  `resolveSwiftSourceDir(configured, outputDir, projectDir)` keeps the Swift file out of
+  `.xcassets` trees.
+- `GeneratedFileCleaner`: header-guarded deletion of Kotlin/Swift sources, `.symbolset` bundles,
+  unused cache entries.
 
-**Key flow**:
-```
-Parse config -> Clean old files -> Parallel SVG download -> Naming transform ->
-Convert to Compose -> Generate .symbolset (optional) -> Clean unused cache -> Statistics
-```
-
----
-
-### 4. **SvgDownloader** (smart downloader)
-**Location**: `src/main/kotlin/.../download/SvgDownloader.kt`
-
-**Responsibilities**:
-- Downloads SVG files from multiple sources (Material Symbols, external URLs)
-- Manages a 7-day TTL cache
-- Supports parallel downloads (Kotlin coroutines)
-- Cache metadata management (timestamp, URL, hash)
-- Configurable retry mechanism
-
-**Features**:
-- Cache hit detection
-- Expired entries are ignored and refreshed on next download
-- Progress tracking
-- Configurable error retry (exponential backoff)
-
----
-
-### 5. **Svg2ComposeConverter** (SVG converter)
-**Location**: `src/main/kotlin/.../converter/Svg2ComposeConverter.kt`
-
-**Responsibilities**:
-- Converts SVG to Compose ImageVector using the `svg-to-compose` library
-- Generates deterministic code (removes timestamps, normalizes floats)
-- Optionally generates Compose Preview functions
-- Generates the `__Icons.kt` accessor object
-
-**Output files**:
-```
-{packageName}/icons/materialsymbols/
-├── SearchW400Outlined.kt       # Single icon
-├── HomeW500RoundedFill.kt
-└── ...
-```
-
----
-
-### 6. **IconConfig** (icon configuration interface)
-**Location**: `src/main/kotlin/.../model/IconConfig.kt`
-
-**Responsibilities**:
-- Defines the common interface for icon library configurations
-- Supports multi-library extension
-
-**Main implementations**:
-- `MaterialSymbolsConfig` - Material Symbols configuration
-  - Contains: SymbolWeight, SymbolVariant, SymbolFill enums
-  - Uses the official Google Fonts CDN
-- `ExternalIconConfig` - External icon configuration
-  - Supports URL templates + style parameters
-  - Supports multi-value parameters (Cartesian product)
-- `LocalIconConfig` - Checked-in local SVG files
-
-**Interface methods**:
-```kotlin
-interface IconConfig {
-    val libraryId: String
-    fun buildUrl(iconName: String): String
-    fun getCacheKey(iconName: String): String
-    fun getSignature(): String
-    val targets: Set<IconTarget>  // defaults to IconTargets.ALL
-}
-```
-
-`targets` routes the icon: COMPOSE-targeted configs reach the SVG -> Compose conversion (excluded
-configs are staged out of the converter's input directory), SWIFTUI-targeted configs reach the
-`.symbolset` generator. Downloads always fetch everything either platform needs.
-
----
-
-### 7. **NamingConfig** (naming configuration)
-**Location**: `src/main/kotlin/.../plugin/NamingConfig.kt`
-
-**Responsibilities**:
-- Provides icon class-name transformation configuration
-- Supports presets and custom transformers
-
-**Preset naming rules**:
-- `pascalCase()` - PascalCase (default)
-- `camelCase()` - camelCase
-- `snakeCase()` - snake_case / SCREAMING_SNAKE
-- `kebabCase()` - kebab-case
-- `lowerCase()` / `upperCase()` - all lower/upper case
-- `customTransformer()` - Custom logic
-
-**Configuration options**:
-```kotlin
-abstract class NamingConfig {
-    abstract val namingConvention: Property<NamingConvention>
-    abstract val suffix: Property<String>
-    abstract val prefix: Property<String>
-    abstract val removePrefix: Property<String>
-    abstract val removeSuffix: Property<String>
-    abstract val transformer: Property<IconNameTransformer>
-}
-```
-
----
-
-### 8. **IconNameTransformer** (naming transformer)
-**Location**: `src/main/kotlin/.../converter/IconNameTransformer.kt`
-
-**Responsibilities**:
-- Executes the concrete naming transformation logic
-- Supports multiple naming conventions
-- Provides extension points for user customization
-
-**Core methods**:
-```kotlin
-abstract class IconNameTransformer {
-    abstract fun transform(fileName: String): String
-    open fun getSignature(): String  // Used for cache signatures
-}
-```
-
----
-
-### 9. **SwiftUI output (.symbolset / custom SF Symbols)**
-
-**Components**:
-- `plugin/SwiftUIConfig.kt` - `swiftUI { }` DSL configuration (enabled, outputDirectory, scaleFactor, generateSwiftEnum, swiftSourceOutputDirectory; disabled by default). When `outputDirectory` IS an `.xcassets` bundle or lives INSIDE one (matched case-insensitively), `Symbols.swift` is redirected to the catalog's parent directory (Xcode treats asset catalogs as leaves — sources inside them never compile); `swiftSourceOutputDirectory` overrides the location explicitly. Both locations are wired into `GenerateSymbolsTask` as declared `@Optional @OutputDirectory` outputs via lazy providers (no `afterEvaluate`).
-- `converter/SymbolSetGenerator.kt` - Pure Kotlin generator (no Gradle types, unit-testable)
-- `tasks/internal/SymbolSetGenerationCoordinator.kt` - Pipeline collaborator; reuses the download phase's temp SVGs, so no extra downloads are triggered
+### 7. **SwiftUI output format**
 
 **Format essentials** (Apple template v2.0 structure, cross-validated against a real export):
-- Each `.symbolset` folder contains `Name.svg` (`Notes`/`Guides`/`Symbols` groups on a 3300×2200 canvas) and `Contents.json`
+- Each `.symbolset` folder contains `Name.svg` (`Notes`/`Guides`/`Symbols` groups on a 3300×2200 canvas) and `Contents.json`; the catalog root carries Xcode's `Contents.json`
 - `#artboard` and `#template-version` inside `#Notes` must be preserved, otherwise Xcode ignores the margins
 - Reference implementations: `EvanBacon/create-symbol` (template v2.0, 27 variants, guide constants, 1.7× optical scaling, 4.5 margin padding); Cookpad's converter script
-- Reference material is cloned into `reference/` (gitignored): swiftdraw, create-symbol, rime (a real Template v.5.0 export), upstream (the upstream repository)
+- Reference material is cloned into `reference/` (gitignored)
 
 **Weight mapping**: Material weight -> SF weight column: W100->Ultralight … W700->Bold. Symbol sets are grouped by (iconName, variant, fill); every symbol set always contains the full 27-variant grid — configured weights use genuine glyph outlines, the rest are derived from the nearest weight via `WEIGHT_SCALES` relative sizing, and S/L scales follow the cap-height ratio. External/local icons produce Regular-only symbol sets.
 
 **Output**:
 - Geometry: baseScale = (CapHeightM / viewBox height) × 1.7 × scaleFactor; glyphs vertically centered between Capline-M and Baseline-M, laid out horizontally by weight column (center 1650, spacing 296.71); `left-margin`/`right-margin` adjusted to Regular column width ±4.5
-- `Symbols.swift`: `GeneratedSymbol` enum + `Image(symbol:)` convenience initializer (Swift keyword escaping, leading-digit handling) + **fixed-size helper** `image(boxSize:)` and `GeneratedSymbol.pointScale` — `.symbolset` glyphs size by font point size, not by box; pointScale = 1 / (1.7 × 0.7 × scaleFactor) (SF Pro cap ratio 0.7, optical scaling 1.7, configured scaleFactor baked in at generation time) converts an artwork box size to the required font size
+- `Symbols.swift`: `GeneratedSymbol` enum + `Image(symbol:)` convenience initializer (Swift keyword escaping, leading-digit handling) + `image(boxSize:)` and `GeneratedSymbol.pointScale` = 1 / (1.7 × 0.7 × scaleFactor)
 
-**Limitations**: Only `<path>`-based SVGs are supported (Material/Bootstrap/Heroicons all qualify); Xcode import cannot be validated on Windows, so structural correctness is guarded by unit tests.
+**Validation**: only `<path>`-based SVGs are supported (Material/Bootstrap/Heroicons all qualify).
+Structural correctness is guarded by unit tests; the CI `ios-build` job (macOS) compiles the
+example catalog with `xcrun actool` and builds the SwiftUI example app with `xcodebuild`, which is
+the end-to-end proof.
+
+---
+
+## Xcode integration contract
+
+For an app consuming the default (build-directory) output, the iOS project needs, once:
+1. File references (no copy) to `<producer>/build/generated/symbolcraft/swiftui/SymbolCraft.xcassets`
+   and `Symbols.swift`, in the Resources and Sources phases respectively.
+2. Both paths listed as **Output Files** of the "Compile Kotlin Framework" run-script phase, so
+   Xcode knows the script produces them ("Build input file cannot be found" otherwise).
+3. The stock script from the Kotlin direct-integration docs, running
+   `./gradlew :<producer or apple consumer>:embedAndSignAppleFrameworkForXcode`, placed before
+   Compile Sources.
+
+`example/iosApp/iosApp.xcodeproj/project.pbxproj` is the reference (`SymbolCraft (generated)`
+group, `A1000000000000000000*` object ids).
 
 ---
 
 ## Development Workflow
 
-### Local development and testing
-
-1. **Modify plugin code**
-   ```bash
-   # Edit source files under src/main/kotlin/
-   vim src/main/kotlin/io/github/archivesteak/symbolcraft/tasks/GenerateSymbolsTask.kt
-   ```
-
-2. **Publish to local Maven**
-   ```bash
-   ./gradlew publishToMavenLocal
-   ```
-
-3. **Test in the example project**
+1. **Modify plugin code** under `src/main/kotlin/`.
+2. **Run the tests**: `./gradlew test` (TestKit builds; the Kotlin-wiring test downloads
+   `org.jetbrains.kotlin.jvm` into `build/testkit`, the pinned TestKit Gradle home).
+3. **Try the example** (the example uses `includeBuild("..")`, no publish needed):
    ```bash
    cd example
-   ./gradlew generateSymbolCraftIcons --info
-   ./gradlew :composeApp:run  # Desktop
+   ./gradlew :shared:generateSymbolCraftIcons :shared:generateSymbolCraftSymbolSets
+   ./gradlew :composeApp:run              # Desktop
+   ./gradlew :composeApp:assembleDebug    # Android
    ```
-
-4. **Clean and rebuild**
-   ```bash
-   ./gradlew clean build
-   ```
+4. **iOS** (macOS only): `open example/iosApp/iosApp.xcodeproj` or the `xcodebuild` command from
+   `.github/workflows/ci.yml`.
+5. **Format**: `./gradlew ktfmtFormat` (CI runs `ktfmtCheck` first). Note: a KDoc containing
+   `/*` (for example a glob like `dir/*.svg` in backticks) opens a nested comment and breaks ktfmt.
 
 ---
 
@@ -392,473 +256,110 @@ abstract class IconNameTransformer {
 
 ### 1. Local build
 ```bash
-./gradlew build                    # Build the plugin
-./gradlew test                     # Run tests
+./gradlew build                    # Build the plugin + tests
 ./gradlew publishToMavenLocal      # Publish to local Maven
 ```
 
-### 2. Publish to the Gradle Plugin Portal
-```bash
-./gradlew publishPlugins           # Requires API key configuration
-```
+### 2. Release
 
-> **Dormant on this fork** — the plugin is not on the Portal and no `GRADLE_PUBLISH_*` secrets
-> exist. The CI job is gated behind the `ENABLE_GRADLE_PORTAL` repository variable; set it to
-> `true` (and add the secrets) to activate.
+Bump `version` in `build.gradle.kts` (and `symbolcraft` in `example/gradle/libs.versions.toml`,
+the docs' version mentions), then commit on `main` with a message starting with
+`chore(release): vX.Y.Z`. CI (`.github/workflows/ci.yml`) verifies the version, runs `build`,
+`example-test`, `validate-plugin` and `ios-build`, creates the GitHub Release and publishes to
+GitHub Packages (`publish-github-packages`, built-in `GITHUB_TOKEN`).
 
-### 2.5 Publish to GitHub Packages (no Sonatype namespace verification required)
+### 3. Publish to the Gradle Plugin Portal / Maven Central
+
+Both jobs are **dormant on this fork** (no secrets); gate variables `ENABLE_GRADLE_PORTAL` /
+`ENABLE_MAVEN_CENTRAL`. Manual GitHub Packages publish:
+
 ```bash
-# Local publish (requires a PAT with read:packages / write:packages)
 ./gradlew publishAllPublicationsToGitHubPackagesRepository \
-  -Pgpr.user=GITHUB_USERNAME \
-  -Pgpr.key=GITHUB_PAT \
-  -Pgpr.repository=owner/repo   # Optional; defaults to the GITHUB_REPOSITORY env var or archivesteak/SymbolCraft
+  -Pgpr.user=GITHUB_USERNAME -Pgpr.key=GITHUB_PAT
 ```
 
-- In CI, the `publish-github-packages` job in `.github/workflows/ci.yml` publishes automatically (uses the built-in `GITHUB_TOKEN` with `packages: write` permission).
-- Note: consumers need a token with `read:packages` even to read public packages (a GitHub Packages limitation).
-
-### 3. Publish to Maven Central
-```bash
-./gradlew publishToMavenCentral    # Requires signing configuration
-```
-
-> **Dormant on this fork** — the plugin is not on Maven Central and no OSSRH/signing secrets
-> exist. The CI job is gated behind the `ENABLE_MAVEN_CENTRAL` repository variable; set it to
-> `true` (and add the secrets) to activate.
-
-**Configuration requirements**:
-- `gradle.properties` or environment variables:
-  - `SIGNING_KEY` - GPG signing key
-  - `SIGNING_PASSWORD` - Signing password
-  - `mavenCentralUsername` - Maven Central username
-  - `mavenCentralPassword` - Maven Central password
-  - `gpr.user` / `gpr.key` - GitHub Packages credentials (optional)
+Consumers need a token with `read:packages` even to read public packages.
 
 ---
 
 ## Cache Mechanism in Detail
 
-### Cache architecture
+1. **SVG download cache** (`build/symbolcraft-cache/svg-cache/`): 7-day TTL, SVG + JSON metadata
+   (`timestamp`, `url`, `hash`), per-library isolation. Declared `@Internal` on the download task
+   (it influences neither the cache key nor the outputs).
+2. **SVG workspace** (`build/symbolcraft/svgs/`): the download task's output; both generators take
+   it as a `@PathSensitive(RELATIVE) @InputDirectory`.
+3. **Gradle task cache**: each task declares only the configuration hash it depends on; outputs are
+   exclusive directories/files under `build/`.
+4. **Configuration cache**: Provider API throughout; tasks hold the extension as an `@Internal`
+   property and never touch `Project` at execution time.
 
-1. **SVG download cache** (`build/symbolcraft-cache/svg-cache/`)
-   - TTL: 7 days
-   - Contains: SVG files + JSON metadata
-   - Metadata fields: `timestamp`, `url`, `hash`
-   - Per-library cache isolation (via libraryId)
-
-2. **Gradle task cache**
-   - Change detection based on the configuration hash
-   - `@CacheableTask` annotation support
-
-3. **Configuration cache**
-   - Uses the Provider API
-   - Avoids accessing Project at execution time
-
-### Cache path support
-
-**Relative paths (default)**:
-```kotlin
-cacheDirectory.set("symbolcraft-cache")  // -> build/symbolcraft-cache/
-```
-- Automatically cleans unused cache
-- Project isolation
-- `./gradlew clean` removes it automatically
-
-**Absolute paths (shared cache)**:
-```kotlin
-// Unix/Linux/macOS
-cacheDirectory.set("/var/tmp/symbolcraft")  // -> /var/tmp/symbolcraft/
-// Windows
-cacheDirectory.set("""C:\Temp\SymbolCraft""")
-```
-- Shared across projects
-- Automatic cleanup skipped (to avoid conflicts)
+Relative `cacheDirectory` values resolve under `build/` and are pruned automatically; absolute
+values are shared caches and never pruned.
 
 ---
 
 ## Testing Status
 
-### Current state
-- `IconNameTransformerTest` - Naming transformation
-- `MaterialSymbolsConfigTest` - Material Symbols configuration model
-- `LocalIconsBuilderTest` - Local SVG discovery
-- `GenerateSymbolsTaskTest` - TestKit integration tests
-- `SymbolSetGeneratorTest` - `.symbolset` generation (30 cases: template structure, guide constants, geometry centering, weight mapping, determinism, name sanitization, Swift enum emission, fill-rule preservation, scaleFactor validation, duplicate-name handling)
-- `SwiftUISourceDirResolutionTest` - `Symbols.swift` placement rules (8 cases: plain folder, `.xcassets` root/child/uppercase/exact-name redirect, relative/absolute override, blank fallback)
-- `IconTargetsDslTest` - Per-icon platform targeting DSL (6 cases: defaults, call-order independence, all three builders, custom `IconConfig` default)
+- `SymbolCraftPluginTest` (TestKit, 15 cases): local/remote/external icons, previews, up-to-date
+  and local-SVG invalidation, download failure by name, platform targets, default `build/` layout
+  with `.xcassets` catalog and `Symbols.swift` placement, same-project embed-task ordering,
+  SwiftUI disabled -> task skipped, **multi-project** compose consumer (variant resolution) and
+  apple consumer (embed dependency), **Kotlin JVM wiring** against a real `org.jetbrains.kotlin.jvm`
+  2.0.0 (source dir added, `compileKotlin` ordered after generation).
+- `SymbolSetGeneratorTest` - `.symbolset` generation (template structure, geometry, weight
+  mapping, determinism, Swift enum emission)
+- `SwiftUISourceDirResolutionTest` - `Symbols.swift` placement rules
+- `IconTargetsDslTest`, `LocalIconsBuilderTest`, `MaterialSymbolsConfigTest`,
+  `IconNameTransformerTest`
 
-All suites are green on Windows and Linux (88 tests). The local-icons glob bug that made
-`LocalIconsBuilderTest`/`GenerateSymbolsTaskTest` fail on Windows was fixed in v0.6.4 — Java glob
-patterns use `/` on every platform, and converting to `File.separator` turned the separator into a
-glob escape character on Windows.
-
----
-
-## TODOs and Improvement Directions
-
-### High priority
-
-1. **Improve error handling**
-   - [x] Done: Configurable retry mechanism (maxRetries, retryDelayMs)
-   - [ ] More detailed, categorized error messages
-   - [ ] Upfront configuration validation (avoid runtime errors)
-
-2. **Performance monitoring**
-   - [ ] Generation time statistics
-   - [ ] Download speed statistics
-   - [ ] Cache hit-rate reports
-
-### Medium priority
-
-3. **Feature enhancements**
-   - [x] Done: Multi-library support (Material Symbols + external libraries)
-   - [x] Done: Flexible naming configuration (NamingConfig)
-   - [x] Done: SwiftUI output (custom SF Symbols `.symbolset`)
-   - [ ] Icon search (CLI)
-   - [ ] Icon usage analysis reports
-
-4. **Developer experience**
-   - [x] Done: Dokka V2 documentation configuration
-   - [ ] More KDoc comments
-   - [ ] Video tutorials / GIF demos
-   - [ ] Project templates
-
-5. **Example extensions**
-   - [x] Done: Compose Multiplatform example (Android + iOS + Desktop)
-   - [x] Done: Example `.symbolset` generation into `example/iosApp/GeneratedSymbols`
-   - [ ] Pure Android example
-   - [ ] Best-practices guide
-
-### Low priority
-
-6. **Ecosystem tools**
-   - [ ] IntelliJ IDEA plugin (visual configuration)
-   - [ ] Gradle configuration wizard
-   - [ ] Icon browser GUI
-
----
-
-## Dependency Management
-
-### Core dependencies
-
-```kotlin
-dependencies {
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
-    implementation("io.ktor:ktor-client-core:2.3.12")
-    implementation("io.ktor:ktor-client-cio:2.3.12")
-    implementation("io.github.kingsword09:svg-to-compose:0.1.0")
-
-    compileOnly("org.gradle:gradle-api")
-    compileOnly("org.jetbrains.kotlin:kotlin-gradle-plugin")
-}
-```
-
-### Version update strategy
-
-- Check for dependency updates regularly: `./gradlew dependencyUpdates`
-- Test compatibility of new versions
-- Keep Kotlin and Gradle versions in sync
+TestKit builds use `build/testkit` as Gradle user home (`GradleRunner.withTestKitDir`) so plugin
+downloads persist between runs and stay on the project's drive.
 
 ---
 
 ## Common Development Tasks
 
-### Adding a new Gradle task
+### Adding a configuration option
+1. Add a `Property<T>` in `SymbolCraftExtension.kt` (or `SwiftUIConfig.kt`).
+2. Include it in the relevant hash (`getComposeHash()` / `getSwiftUIHash()`), never in all three.
+3. Read it in the task that needs it; pass it through the request data class.
+4. Update README.md, AGENTS.md and the example.
 
-1. Register the task in `SymbolCraftPlugin.kt`
-2. Create a task class extending `DefaultTask` in `tasks/`
-3. Mark the execution method with `@TaskAction`
-4. Configure task inputs/outputs for incremental build support
+### Adding a new icon library
+1. Implement `IconConfig` in `model/IconConfig.kt` (`buildUrl`, `getCacheKey`, `getSignature`, `targets`).
+2. Add the DSL method in `SymbolCraftExtension.kt`.
+3. Update documentation and examples.
 
-### Adding a new configuration option
-
-1. Add a `Property<T>` in `SymbolCraftExtension.kt`
-2. Read the configuration in `GenerateSymbolsTask.kt`
-3. Update the configuration hash (`getConfigHash()`)
-4. Update all documentation (README.md, AGENTS.md)
-
-### Adding support for a new icon library
-
-1. Create a new `IconConfig` implementation in `model/IconConfig.kt`
-2. Implement the required methods: `buildUrl()`, `getCacheKey()`, `getSignature()`
-3. Add the corresponding DSL method in `SymbolCraftExtension.kt`
-4. Update documentation and examples
-
-### Modifying SVG download logic
-
-Edit `src/main/kotlin/.../download/SvgDownloader.kt`:
-- Change CDN URLs
-- Adjust cache strategy
-- Enhance error handling
-
-### Modifying code generation
-
-Edit `src/main/kotlin/.../converter/Svg2ComposeConverter.kt`:
-- Adjust output format
-- Modify preview generation
-- Customize file naming
-
-### Running code formatting
-
-- `./gradlew ktfmtFormat`: Format all Kotlin sources with ktfmt.
-- `./gradlew ktfmtCheck`: Verify formatting against ktfmt rules; wired into the `check` pipeline.
-
-### CI formatting strategy
-
-- GitHub Actions runs `./gradlew ktfmtCheck` at the very start of the `build` workflow; non-compliant formatting fails fast and blocks subsequent jobs.
-- Git hooks are not enforced locally by default. Run `./gradlew ktfmtFormat` (auto-fix) or `./gradlew ktfmtCheck` (verify only) before committing to avoid CI failures.
+### Changing what is generated
+- Compose: `converter/Svg2ComposeConverter.kt`; SwiftUI: `converter/SymbolSetGenerator.kt`.
+- Anything that changes bytes must keep the output deterministic.
 
 ---
 
 ## Debugging Tips
 
-### Enable verbose logging
 ```bash
-./gradlew generateSymbolCraftIcons --info       # Info level
-./gradlew generateSymbolCraftIcons --debug      # Debug level
-./gradlew generateSymbolCraftIcons --stacktrace # Stack traces
-```
-
-### Disable configuration cache (for debugging)
-```bash
+./gradlew generateSymbolCraftIcons --info
+./gradlew generateSymbolCraftSymbolSets --debug --stacktrace
 ./gradlew generateSymbolCraftIcons --no-configuration-cache
-```
-
-### Force task re-execution
-```bash
-./gradlew generateSymbolCraftIcons --rerun-tasks
-```
-
-### View task dependencies
-```bash
-./gradlew generateSymbolCraftIcons --dry-run
-```
-
-### View generated files
-```bash
-# View generated Kotlin files
-find . -path "*/generated/symbols/*" -name "*.kt"
-
-# Check cache status
-du -sh build/symbolcraft-cache/
+./gradlew generateSymbolCraftIcons generateSymbolCraftSymbolSets --rerun-tasks
+./gradlew :composeApp:compileKotlinJvm --dry-run       # confirms generation precedes compilation
+./gradlew :shared:outgoingVariants                      # shows the two SymbolCraft variants
 ```
 
 ---
 
 ## Git Workflow
 
-### Branch strategy
-- `main` - Stable release branch
-- `develop` - Development branch (if present)
-- `feature/*` - Feature branches
-- `fix/*` - Fix branches
-
-### Commit conventions (recommended)
-```
-<type>(<scope>): <subject>
-
-Types:
-- feat: New feature
-- fix: Bug fix
-- docs: Documentation
-- style: Code formatting
-- refactor: Refactoring
-- test: Tests
-- chore: Build/tooling
-
-Examples:
-feat(downloader): add retry mechanism for failed downloads
-fix(cache): resolve path issues on Windows
-docs(readme): update installation guide
-```
+- `main` - stable release branch; feature branches `feature/*`, fixes `fix/*`
+- Commit convention: `<type>(<scope>): <subject>` (`feat`, `fix`, `docs`, `refactor`, `test`, `chore`); breaking changes use `!`.
 
 ---
 
 ## Contributor Guide
 
-### Getting started
-
-1. Fork the repository to your GitHub account
-2. Clone it locally:
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/SymbolCraft.git
-   cd SymbolCraft
-   ```
-
-3. Configure the upstream remote:
-   ```bash
-   git remote add upstream https://github.com/archivesteak/SymbolCraft.git
-   ```
-
-### Development flow
-
-1. Create a feature branch
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-
-2. Develop and test
-   ```bash
-   ./gradlew build
-   ./gradlew publishToMavenLocal
-   cd example && ./gradlew generateSymbolCraftIcons
-   ```
-
-3. Commit your changes
-   ```bash
-   git add .
-   git commit -m "feat: add your feature description"
-   ```
-
-4. Push and create a Pull Request
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-
-### Pull Request checklist
-
-- [ ] Code follows Kotlin coding conventions
-- [ ] Relevant documentation added/updated
-- [ ] Tests added/updated (if applicable)
-- [ ] Local tests pass
-- [ ] Example project runs correctly
-- [ ] PR description is clear
-
----
-
-## Resources
-
-### Official resources
-- **GitHub repository**: https://github.com/archivesteak/SymbolCraft
-- **GitHub Packages**: https://github.com/archivesteak/SymbolCraft/packages
-- **Upstream (original)**: https://github.com/kingsword09/SymbolCraft
-
-### Related tools
-- **Material Symbols browser**: https://marella.github.io/material-symbols/demo/
-- **Material Symbols official**: https://fonts.google.com/icons
-- **svg-to-compose library**: https://github.com/DevSrSouza/svg-to-compose
-
-### Documentation
-- **User documentation**: [README.md](README.md)
-- **Developer documentation**: [AGENTS.md](AGENTS.md) (this file)
-
----
-
-## Contact
-
-- **Maintainer**: [@archivesteak](https://github.com/archivesteak)
-- **Email**: archivesteak@gmail.com
-- **Issue tracker**: [GitHub Issues](https://github.com/archivesteak/SymbolCraft/issues)
-
----
-
-## Changelog
-
-### v0.7.0 (latest)
-- **Per-icon platform targeting**: new `swiftUIOnly()` / `composeOnly()` DSL on all three icon builders (plus a `targets: Set<IconTarget>` property and an `IconConfig.targets` interface member defaulting to `IconTargets.ALL`). Apple-only icons like `airplay` can now be emitted as `.symbolset` bundles without polluting the Compose source set, and vice versa. Applied at builder completion, so call order does not matter; the config hash includes targets so toggling invalidates the task correctly.
-- **Pipeline routing**: the Compose converter consumes a whole directory, so when filtering is active the COMPOSE-targeted SVGs are staged into a sibling temp dir (zero copies in the default all-allowed case); the `.symbolset` phase simply filters configs by target. Downloads always fetch whatever either platform needs, and the pre-generation cleaner removes stale output when an icon's target changes.
-- **No-output warnings**: `generateSymbolCraftIcons` and `validateSymbolCraftConfig` warn when icons target SwiftUI only while SwiftUI output is disabled (they would generate nothing).
-- **Tests**: new `IconTargetsDslTest` (6 cases) and a TestKit integration test asserting a `swiftUIOnly` Material Symbol emits a symbol set + `Symbols.swift` case but no Kotlin source (and the reverse for `composeOnly`). 88 tests total.
-- **Example**: demonstrates `materialSymbol("airplay") { style(); swiftUIOnly() }`.
-
-### v0.6.5
-- **Local-SVG staleness bug fixed**: the contents of every `localIcons { }` SVG are now declared `@InputFiles` on `generateSymbolCraftIcons` — editing a checked-in SVG used to leave the task UP-TO-DATE with stale generated code. Guarded by a new TestKit regression test (edit file -> task re-runs).
-- **Generated-file delete guard**: every generated `.kt` file now starts with a `// Generated by SymbolCraft` header (the same marker `Symbols.swift` already had), and both the pre-generation cleaner and `cleanSymbolCraftIcons` refuse to delete Kotlin files without it — hand-written sources under the icons directory can no longer be destroyed. Note: files generated by 0.6.4 or earlier lack the header, so orphans from *removed* icons produced by older versions must be deleted by hand once.
-- **Phantom serialization dependency removed**: `@Serializable` annotations and the kotlinx-serialization plugin/dependency were dead weight — no `Json.` usage existed anywhere. Both are gone, shrinking the published POM.
-- **Reproducible published jar**: `Built-By`/`Built-JDK`/`Built-Gradle` manifest attributes (machine-specific, leaked the build username) removed.
-- **Duplicated temp-file naming unified**: `DownloadCoordinator` and `SymbolSetGenerator` carried byte-identical filename logic (a drift bomb); it now lives once as `tempSvgFileName` in the model package.
-- **Validation deepened**: `validateSymbolCraftConfig` now checks `packageName` against Kotlin package syntax, rejects blank icon names and blank output directories, and validates `swiftUI.scaleFactor`/output up front.
-- **Build hygiene**: the pre-Vanniktech manual signing block slimmed to just key plumbing and optional-when-keyless (`signAllPublications()` owns the per-publication sign tasks; the old `afterEvaluate { sign(...) }` was redundant); dead serialization entries dropped from the version catalog; stale `IconLibraryClassifier` KDoc corrected; test cruft removed (debug `println`, triple-duplicated test SVG fixture).
-- **Tests**: new TestKit case `editing a local svg re-runs generation`.
-
-### v0.6.4
-- **Windows local-icons bug fixed**: `localIcons { }` glob patterns no longer convert `/` to `File.separator` — Java globs use `/` on every platform and a backslash is a glob escape, so every include/exclude pattern silently matched nothing on Windows. Heals the 9 `LocalIconsBuilderTest`/`GenerateSymbolsTaskTest` cases that always failed on Windows (full suite now green everywhere) and makes local icons work at all on Windows machines.
-- **Failure semantics hardened**: SVG-to-Compose and `.symbolset` conversion failures now fail the build instead of being logged and swallowed — previously the `@CacheableTask` recorded success with partial output and cached the broken state.
-- **Cache integrity verified**: the SHA-256 recorded in cache metadata is now checked on read; tampered/truncated cache payloads are discarded and re-downloaded. Security-scan regexes are compiled once (class level) instead of per download.
-- **Collision-proof cache keys**: `ExternalIconConfig`/`LocalIconConfig` cache keys use a truncated SHA-256 instead of 32-bit `String.hashCode()` (old entries simply re-download once).
-- **Dead weight removed**: `MaterialSymbolsPresets`, `NameTransformerFactory.create`, `Svg2ComposeConverter.convertSingleFile`/`canProcess`, the unused `gradleUserHomeDir` task input, the unused `NamingConfig` `ObjectFactory`, and the legacy `merge*Assets`/`process*Resources`/metadata task wiring (generated icons are Kotlin sources — asset tasks never consume them). The remaining name-based compile wiring is lazy (`configureEach`); `afterEvaluate` is fully gone.
-- **Extension plumbing**: the project directory is now injected via `ProjectLayout` constructor injection instead of a public mutable `projectDirectory` DSL property users should never have seen.
-- **Docs**: README rewritten (1125 -> ~250 lines, no emoji-decorated log samples); emojis stripped from all sources, docs and CI output; stale KDoc examples fixed (`IconConfig.buildUrl` signature, `materialSymbol` builder, SwiftUI catalog wording).
-- **Internals**: per-call regex compilation hoisted in `IconNameTransformer`; download-progress logging simplified; cache TTL read logic deduplicated; redundant `SymbolWeight.REGULAR` alias comparisons removed.
-
-### v0.6.3
-- **Gradle output contract fixed**: `Symbols.swift`'s write location is now a declared `@Optional @OutputDirectory` on `GenerateSymbolsTask` (`swiftUISourceDir`), resolved via lazy providers at configuration time — no more `afterEvaluate`, no undeclared outputs, correct up-to-date/build-cache behavior. `GenerationContext` carries both SwiftUI directories as the single source of truth.
-- **`.xcassets` detection generalized**: the redirect now matches a catalog anywhere in the output path (case-insensitive), so a dedicated child like `Assets.xcassets/SymbolCraft` (recommended — keeps the task output from overlapping your hand-managed assets) also redirects `Symbols.swift` to the catalog parent.
-- **Stale-file hygiene**: the pre-generation cleaner and `cleanSymbolCraftIcons` now remove generated `Symbols.swift` from the source location too (output dir, catalog parent, custom dir), guarded by the `// Generated by SymbolCraft` header check so user files are never deleted; `cleanSymbolCraftIcons` also removes `.symbolset` bundles.
-- **SVG fidelity**: `fill-rule`/`clip-rule` attributes are preserved through `.symbolset` generation (Bootstrap Icons/Heroicons holes render correctly); single-quoted SVG attributes accepted; a warning is logged when a `<path>` carries an ignored `transform`.
-- **Fail-fast validation**: non-positive/non-finite `scaleFactor` rejected; duplicate symbol set names after sanitization fail with an actionable message; `generateSwiftEnumFile` creates missing output directories and dedupes Swift case names that collide with each other or with reserved members (`pointScale`, `allCases`, `image`, `rawValue`).
-- **Compile wiring widened**: added `org.jetbrains.kotlin.js`, `com.android.dynamic-feature`, `com.android.test` to the type-based `KotlinCompileTool` wiring; a diagnostic is logged if the reflective lookup ever fails.
-- **CI/release hardening**: `notify` now tracks the GitHub Packages job; Portal/Maven Central jobs are dormant behind `ENABLE_GRADLE_PORTAL`/`ENABLE_MAVEN_CENTRAL` repo variables; release job fails fast when the commit-message version doesn't match `build.gradle.kts`; GitHub Packages publish is skipped when the version already exists (no more 409); release notes document the GitHub Packages install.
-- **Internals**: config hash uses SHA-256 instead of `String.hashCode()`; duplicate task-input registrations removed; `projectBuildDir` wired lazily; POM license `distribution` corrected to `repo`.
-- **Tests**: 8 new `SymbolSetGeneratorTest` cases + 3 new `SwiftUISourceDirResolutionTest` cases.
-- **Docs**: README log samples/error messages corrected, example baseline and `Config.xcconfig` bundle id fixed, AGENTS.md structure tree completed.
-
-### v0.6.2
-- **`.xcassets`-compatible Swift sources**: new optional `swiftSourceOutputDirectory` DSL property. When `swiftUI.outputDirectory` points at an Xcode asset catalog (so `.symbolset` bundles compile via a synchronized group without the manual drag-in step), `Symbols.swift` is now written to the catalog's parent directory instead of inside it — Xcode treats catalogs as leaves, so Swift sources inside `.xcassets` were invisible to the compiler, making `generateSwiftEnum` and catalog output mutually exclusive. Stale in-catalog `Symbols.swift` copies are removed by the pre-generation cleaner.
-- **Tests**: new `SwiftUISourceDirResolutionTest` (5 cases: plain folder, `.xcassets` redirect, relative/absolute override, blank fallback).
-
-### v0.6.1
-- **Compile-task wiring fix**: generation is now wired into every `KotlinCompileTool` task by type (loaded reflectively), fixing builds where the Kotlin compile task name contains no "Kotlin" — e.g. AGP 9.x built-in Kotlin / KMP modules (`compileAndroidMain`), which previously failed with "uses this output of task ':generateSymbolCraftIcons' without declaring a dependency".
-- **SwiftUI fixed-size helper**: generated `Symbols.swift` now includes `GeneratedSymbol.pointScale` (= 1 / (1.7 × 0.7 × scaleFactor)) and `image(boxSize:)`, so a symbol can be rendered in an exact point box (e.g. `GeneratedSymbol.homeOutlined.image(boxSize: 24)`) instead of only sizing by font.
-- **Tests**: 2 new `SymbolSetGeneratorTest` cases (pointScale value, scaleFactor baking).
-
-### v0.6.0
-- **SwiftUI output**: New `swiftUI { }` DSL generating custom SF Symbol `.symbolset` bundles (template v2.0, full 27 weight/scale variant grid) from the same downloaded SVGs; Material weights map to genuine SF weight columns; optional `Symbols.swift` helper enum.
-- **GitHub Packages publishing**: New `GitHubPackages` Maven repository target (`publishAllPublicationsToGitHubPackagesRepository`) plus a `publish-github-packages` CI job — no Sonatype namespace verification required.
-- **Tests**: New `SymbolSetGeneratorTest` (20 cases: template structure, guide constants, geometry centering, weight mapping, determinism, name sanitization).
-- **Docs**: AGENTS.md rewritten in English; README_ZH.md removed.
-
-### v0.5.0
-- **Breaking change**: Built-in `materialSymbol()` / `materialSymbols()` filled Material Symbols names changed from `...fill1` to `...Fill`, avoiding leaking the Google Fonts URL suffix into the Kotlin API.
-- **Multi-source docs**: README gained configuration examples for built-in Material Symbols, external CDN/npm SVG packages, multi-variant external sources, and local SVGs.
-- **Example sync**: example regenerated filled Material Symbols and updated references such as `HomeW400OutlinedFill` and `SettingsW500RoundedFill`.
-
-### v0.4.0
-- **Compose Preview configuration**: New `previewAnnotationClass`, supporting the modern Compose Multiplatform default AndroidX preview annotation as well as the legacy JetBrains one.
-- **Example source root adjustment**: example generated-icons directory moved to `src/commonMain/generated/symbols`, reducing IDE package-path warnings.
-- **Example external source update**: the official Material Symbols external source switched to esm.sh with a `-fill` variant configuration.
-
-### v0.3.1
-- **Security hardening**: Blocked XXE and path-traversal attacks in external SVGs, added content-type and size validation, and fully sanitized dangerous path characters.
-- **Task split**: `GenerateSymbolsTask` split into smaller steps; more readable log output and groundwork for unit tests.
-- **Documentation**: Documented key constants and default-value design to help contributors understand the configuration quickly.
-
-### v0.3.0
-- **Multi-variant external icons**: `styleParam { values(...) }` supports Cartesian-product combinations; one declaration generates multiple external icon variants.
-- **Exponential backoff retry**: The SVG downloader supports exponential backoff, more robust under unstable networks.
-- **Official CDN**: Material Symbols switched to the official Google Fonts CDN by default for availability and freshness.
-- **Configuration cache fix**: Resolved Gradle configuration-cache serialization issues, improving incremental-build compatibility.
-- **Naming transformation rewrite**: Rewrote IconNameTransformer; naming configuration is more flexible and reliable.
-
-### v0.2.1
-- **Major refactor**: Plugin renamed to SymbolCraft (from MaterialSymbolsPlugin)
-- **Multi-library support**: Material Symbols + Bootstrap Icons + Heroicons + custom URLs
-- **Flexible naming**: PascalCase, camelCase, snake_case and more
-- **Configurable retry**: Added maxRetries and retryDelayMs
-- **Dokka V2**: Full API documentation generation
-- **New DSL**: externalIcon/externalIcons methods
-- **Updated cache**: symbolcraft-cache directory (from material-symbols-cache)
-- **Documentation**: Updated all READMEs and the developer guide
-
-### v0.1.2
-- Absolute-path cache configuration support
-- Smart cache cleanup (skips shared caches)
-- Documentation updates
-
-### v0.1.1
-- Fixed example preview rendering errors
-- Refactored SymbolWeight into an enum
-- Absolute-path support for the cache directory
-
-### v0.1.0
-- Initial release
-- Core functionality complete
-- Complete documentation
-- Example project
-
----
-
-**Last updated**: 2026-08-02
-**Documentation version**: 3.0.0
+1. Fork, clone, `git remote add upstream https://github.com/archivesteak/SymbolCraft.git`
+2. Branch, change, `./gradlew ktfmtFormat build`
+3. Try the example on at least one platform; describe iOS verification in the PR if you have a Mac
+4. Open a PR against `main`
